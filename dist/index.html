@@ -17,7 +17,7 @@
     <div class="container mx-auto p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-4xl font-bold text-gray-900">EC2 LLM Instance Calculator</h1>
-            <p class="mt-2 text-lg text-gray-600">Find the most cost-optimized AWS instance for your LLM workloads.</p>
+            <p class="mt-2 text-lg text-gray-600">Find the most cost-optimized AWS instance or cluster for your LLM workloads.</p>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -247,7 +247,7 @@
                 finePrint = `<strong>Full-Tuning Calculation:</strong> VRAM ≈ Weights + Gradients + Optimizer States + Overhead.`;
             } else { // PEFT
                 const weightsMemory = modelSize * quantizationBytes;
-                const loraOverhead = 4.0; // Fixed overhead for LoRA adapters, optimizer, etc.
+                const loraOverhead = 4.0; 
                 const frameworkOverhead = 2.0;
                 requiredMemory = weightsMemory + loraOverhead + frameworkOverhead;
                  breakdown = {
@@ -271,22 +271,25 @@
         }
 
         function findAndRenderInstances(requiredMemory) {
-            const singleGpuFits = instanceData
-                .filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
-
-            const multiGpuFits = instanceData
-                .filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.gpuMemoryPerGpu < requiredMemory && inst.price > 0);
-
             let html = '<h2 class="text-xl font-semibold mb-4">3. Instance Recommendations</h2>';
             let found = false;
             
+            const singleGpuFits = instanceData.filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
             if (singleGpuFits.length > 0) {
                 html += renderInstanceSection('Single Accelerator Instances', singleGpuFits, 'single');
                 found = true;
             }
+
+            const multiGpuFits = instanceData.filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.gpuMemoryPerGpu < requiredMemory && inst.price > 0);
             if (multiGpuFits.length > 0) {
                 html += renderInstanceSection('Multi-Accelerator Instances (Requires Model Parallelism)', multiGpuFits, 'multi');
                 found = true;
+            }
+
+            // If no single or multi-gpu instance fits, recommend a cluster
+            if (!found && requiredMemory > 0) {
+                 html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
+                 found = true;
             }
 
             if (!found) {
@@ -330,7 +333,7 @@
 
             let instancesHtml = instances
                 .sort((a,b) => a.price - b.price) 
-                .slice(0, 5) // Limit to top 5 cheapest
+                .slice(0, 5) 
                 .map(inst => {
                 
                 const isCheapest = inst.name === cheapest.name;
@@ -379,6 +382,52 @@
                 </div>
             `;
         }
+
+        function renderClusterSection(title, requiredMemory) {
+             const clusterCandidates = instanceData.filter(inst => 
+                ['p5.48xlarge', 'p6-b200.48xlarge', 'trn1n.32xlarge'].includes(inst.name) && inst.price > 0
+            );
+
+            const clusterConfigs = clusterCandidates.map(inst => {
+                const nodesNeeded = Math.ceil(requiredMemory / inst.totalGpuMemory);
+                return {
+                    ...inst,
+                    nodesNeeded: nodesNeeded,
+                    totalClusterCost: nodesNeeded * inst.price,
+                    totalClusterMemory: nodesNeeded * inst.totalGpuMemory,
+                };
+            }).sort((a,b) => a.totalClusterCost - b.totalClusterCost);
+
+            let clusterHtml = clusterConfigs.map(config => {
+                 const colorClass = {
+                    'GPU': 'bg-green-100 text-green-800',
+                    'Trainium': 'bg-yellow-100 text-yellow-800',
+                }[config.type];
+
+                return `
+                     <div class="border border-indigo-500 bg-indigo-50 rounded-lg p-3">
+                        <div class="flex justify-between items-start">
+                            <p class="font-semibold text-indigo-700 flex items-center">${config.nodesNeeded} x ${config.name}</p>
+                            <span class="text-base font-bold text-gray-700">$${config.totalClusterCost.toFixed(2)}/hr (Total)</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">
+                           Total Memory: <span class="font-medium">${config.totalClusterMemory.toLocaleString()} GB</span> | Type: <span class="font-semibold px-1 py-0.5 rounded ${colorClass}">${config.type}</span>
+                        </p>
+                         <p class="text-xs text-gray-500 mt-1">
+                            Requires advanced multi-node parallelism frameworks like FSDP.
+                        </p>
+                    </div>
+                `
+            }).join('');
+            
+            return `
+                <div class="mt-4">
+                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
+                    <div class="mt-2 space-y-2">${clusterHtml}</div>
+                </div>
+            `;
+        }
+
 
         function renderGuidance() {
             guidanceEl.innerHTML = `
