@@ -78,16 +78,25 @@
                     <div id="parallelism-section">
                         <label for="parallelism" class="block text-sm font-medium text-gray-700 flex items-center">
                             Parallelism Strategy
-                            <div class="tooltip ml-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
-                                <span class="tooltip-text">Choose a strategy. 'Automatic' is best for most cases. Use others for specific needs like maximizing throughput (Data Parallelism) or fitting very large models (Tensor/Pipeline).</span>
-                            </div>
                         </label>
                         <select id="parallelism" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
                             <option value="automatic">Automatic (Recommended)</option>
                             <option value="data">Data Parallelism</option>
                             <option value="tensor_pipeline">Tensor + Pipeline Parallelism</option>
+                             <option value="expert">Expert Parallelism (MoE)</option>
                         </select>
+                    </div>
+                    
+                    <div id="expert-params" style="display: none;" class="space-y-6 border-t pt-6 mt-6 border-dashed">
+                         <h3 class="text-sm font-semibold text-gray-600">Mixture-of-Experts (MoE) Configuration</h3>
+                        <div>
+                            <label for="numExperts" class="block text-sm font-medium text-gray-700">Total Number of Experts</label>
+                            <input type="number" id="numExperts" value="8" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                        </div>
+                         <div>
+                            <label for="expertsPerNode" class="block text-sm font-medium text-gray-700">Experts per Node</label>
+                            <input type="number" id="expertsPerNode" value="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                        </div>
                     </div>
 
                     <div id="training-params" style="display: none;" class="space-y-6 mt-6">
@@ -198,12 +207,18 @@
         const inferenceParamsEl = document.getElementById('inference-params');
         const trainingTypeEl = document.getElementById('trainingType');
         const parallelismEl = document.getElementById('parallelism');
+        const expertParamsEl = document.getElementById('expert-params');
+        const numExpertsEl = document.getElementById('numExperts');
+        const expertsPerNodeEl = document.getElementById('expertsPerNode');
 
         // --- LOGIC ---
         function handleFormState() {
             const task = taskEl.value;
+            const parallelism = parallelismEl.value;
             trainingParamsEl.style.display = task === 'training' ? 'block' : 'none';
             inferenceParamsEl.style.display = task === 'inference' ? 'block' : 'none';
+            expertParamsEl.style.display = parallelism === 'expert' ? 'block' : 'none';
+
         }
 
         function calculateAndDisplay() {
@@ -225,7 +240,13 @@
             let calculationBreakdown = {};
             let finePrint = '';
 
-            if (task === 'inference') {
+            if (parallelism === 'expert') {
+                const trainingType = trainingTypeEl.value;
+                const { memory, breakdown, finePrint: fp } = calculateExpertMemory(modelSize, quantizationBytes, trainingType);
+                requiredMemory = memory;
+                calculationBreakdown = breakdown;
+                finePrint = fp;
+            } else if (task === 'inference') {
                 const contextLength = parseInt(contextLengthEl.value, 10) || 0;
                 const batchSize = parseInt(batchSizeEl.value, 10) || 0;
                 if (contextLength <= 0 || batchSize <= 0) {
@@ -239,13 +260,13 @@
 
             } else { // training
                 const trainingType = trainingTypeEl.value;
-                const { memory, breakdown, finePrint: fp } = calculateTrainingMemory(modelSize, quantizationBytes, trainingType);
+                const { memory, breakdown, finePrint: fp } = calculateStandardTrainingMemory(modelSize, quantizationBytes, trainingType);
                 requiredMemory = memory;
                 calculationBreakdown = breakdown;
                 finePrint = fp;
             }
             
-            renderSummary(requiredMemory, calculationBreakdown, finePrint);
+            renderSummary(requiredMemory, calculationBreakdown, finePrint, parallelism);
             const recommendationType = findAndRenderInstances(requiredMemory, parallelism);
             renderGuidance(recommendationType);
         }
@@ -265,12 +286,9 @@
             return { memory: requiredMemory, breakdown };
         }
         
-        function calculateTrainingMemory(modelSize, quantizationBytes, trainingType) {
-            let requiredMemory = 0;
-            let breakdown = {};
-            let finePrint = '';
-            
-            if (trainingType === 'full') {
+        function calculateStandardTrainingMemory(modelSize, quantizationBytes, trainingType) {
+            let requiredMemory, breakdown, finePrint;
+             if (trainingType === 'full') {
                 const gradientBytes = 4;
                 const adamStateBytes = 8;
                 const totalMultiplier = quantizationBytes + gradientBytes + adamStateBytes;
@@ -298,6 +316,27 @@
                 finePrint = `<strong>PEFT Calculation:</strong> VRAM ≈ Weights + PEFT Adapters (estimated at 15% of model size) + Framework Overhead.`;
             }
             return { memory: requiredMemory, breakdown, finePrint };
+        }
+
+        function calculateExpertMemory(expertSize, quantizationBytes, trainingType) {
+            const numExperts = parseInt(numExpertsEl.value, 10) || 1;
+            const expertsPerNode = parseInt(expertsPerNodeEl.value, 10) || 1;
+
+            if (expertsPerNode <= 0 || numExperts <= 0) {
+                 return { memory: 0, breakdown: {}, finePrint: 'Invalid expert configuration.' };
+            }
+            
+            const { memory: singleExpertMemory } = calculateStandardTrainingMemory(expertSize, quantizationBytes, trainingType);
+            const requiredMemoryPerNode = singleExpertMemory * expertsPerNode;
+            
+            const breakdown = {
+                "Total Experts": `${numExperts}`,
+                "Experts per Node": `${expertsPerNode}`,
+                "Est. Memory per Expert": `${singleExpertMemory.toFixed(2)} GB`,
+            };
+            const finePrint = `<strong>MoE Calculation:</strong> Memory per node is based on hosting ${expertsPerNode} expert replica(s). Total cluster size depends on total experts.`;
+            
+            return { memory: requiredMemoryPerNode, breakdown, finePrint };
         }
 
         function getModelInternals(paramsInBillions) {
@@ -346,6 +385,17 @@
                     html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
                     recommendationType = 'cluster';
                 }
+            } else if(parallelism === 'expert') {
+                const numExperts = parseInt(numExpertsEl.value, 10) || 1;
+                const expertsPerNode = parseInt(expertsPerNodeEl.value, 10) || 1;
+                const nodesNeeded = Math.ceil(numExperts / expertsPerNode);
+
+                const validNodes = instanceData.filter(inst => inst.totalGpuMemory >= requiredMemory && inst.gpus >= expertsPerNode && inst.price > 0);
+
+                if (validNodes.length > 0) {
+                    html += renderExpertClusterSection('Expert Parallelism Cluster', validNodes, nodesNeeded);
+                    recommendationType = 'expert_cluster';
+                }
             }
             
             if (recommendationType === 'none') {
@@ -359,7 +409,7 @@
         }
 
         // --- Rendering Logic ---
-        function renderSummary(requiredMemory, breakdown, finePrint) {
+        function renderSummary(requiredMemory, breakdown, finePrint, parallelism) {
             let breakdownHtml = Object.entries(breakdown).map(([key, value]) => `
                 <li class="flex justify-between py-1">
                     <span class="text-gray-600">${key}:</span>
@@ -367,8 +417,10 @@
                 </li>
             `).join('');
 
+            const title = parallelism === 'expert' ? 'Est. Memory Requirement Per Node' : 'Estimated Memory Requirement';
+
             summaryEl.innerHTML = `
-                <h2 class="text-xl font-semibold mb-2">2. Estimated Memory Requirement</h2>
+                <h2 class="text-xl font-semibold mb-2">2. ${title}</h2>
                 <div class="p-4 bg-gray-100 rounded-lg">
                     <div class="flex justify-between items-baseline mb-3">
                         <h3 class="text-lg font-semibold">Total Needed:</h3>
@@ -469,12 +521,7 @@
 
             const clusterConfigs = clusterCandidates.map(inst => {
                 const nodesNeeded = Math.ceil(requiredMemory / inst.totalGpuMemory);
-                return {
-                    ...inst,
-                    nodesNeeded: nodesNeeded,
-                    totalClusterCost: nodesNeeded * inst.price,
-                    totalClusterMemory: nodesNeeded * inst.totalGpuMemory,
-                };
+                return { ...inst, nodesNeeded, totalClusterCost: nodesNeeded * inst.price, totalClusterMemory: nodesNeeded * inst.totalGpuMemory };
             }).sort((a,b) => a.totalClusterCost - b.totalClusterCost);
 
             let clusterHtml = clusterConfigs.map(config => {
@@ -500,6 +547,36 @@
             `;
         }
 
+         function renderExpertClusterSection(title, instances, nodesNeeded) {
+             let instancesHtml = instances
+                .sort((a, b) => a.price - b.price)
+                .slice(0, 5)
+                .map(inst => {
+                const totalClusterCost = inst.price * nodesNeeded;
+                 const colorClass = { 'GPU': 'bg-green-100 text-green-800', 'Trainium': 'bg-yellow-100 text-yellow-800' }[inst.type];
+                 return `
+                    <div class="border border-indigo-500 bg-indigo-50 rounded-lg p-3">
+                        <div class="flex justify-between items-start">
+                            <p class="font-semibold text-indigo-700 flex items-center">${nodesNeeded} x ${inst.name}</p>
+                            <span class="text-base font-bold text-gray-700">$${totalClusterCost.toFixed(2)}/hr (Total)</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">
+                           Node Type: <span class="font-medium">${inst.type}</span> |
+                           Accelerators per Node: <span class="font-medium">${inst.gpus}</span> |
+                           Memory per Node: <span class="font-medium">${inst.totalGpuMemory} GB</span>
+                        </p>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="mt-4">
+                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
+                    <div class="mt-2 space-y-2">${instancesHtml}</div>
+                </div>
+            `;
+        }
+
 
         function renderGuidance(recommendationType) {
             let parallelismHtml = '';
@@ -509,7 +586,7 @@
                         <h4 class="font-bold text-blue-800">Recommended Strategy: Model Parallelism</h4>
                         <p class="text-blue-700">Your model is too large for a single accelerator but fits on a multi-accelerator instance. Use a combination of <strong class="font-semibold">Tensor Parallelism</strong> (splitting layers across accelerators) and <strong class="font-semibold">Pipeline Parallelism</strong> (splitting the whole model layer-by-layer) to distribute the workload.</p>
                     </div>`;
-            } else if (recommendationType === 'cluster') {
+            } else if (recommendationType === 'cluster' || recommendationType === 'expert_cluster') {
                  parallelismHtml = `
                     <div class="p-3 bg-red-50 rounded-lg">
                         <h4 class="font-bold text-red-800">Recommended Strategy: Multi-Node Parallelism (FSDP)</h4>
@@ -537,7 +614,10 @@
         // --- EVENT LISTENERS ---
         calculateBtn.addEventListener('click', calculateAndDisplay);
         taskEl.addEventListener('change', handleFormState);
-        parallelismEl.addEventListener('change', calculateAndDisplay);
+        parallelismEl.addEventListener('change', () => {
+            handleFormState();
+            calculateAndDisplay();
+        });
 
 
         // --- Initial Load ---
