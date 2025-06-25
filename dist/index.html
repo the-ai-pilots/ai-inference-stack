@@ -10,6 +10,33 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 280px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 10;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -140px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.875rem;
+            font-weight: 400;
+        }
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -21,7 +48,6 @@
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Input Controls Column -->
             <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-semibold mb-6 border-b pb-4">1. Configure Your Workload</h2>
                 
@@ -49,8 +75,22 @@
                         </select>
                     </div>
 
-                    <!-- Training Specific Params -->
-                    <div id="training-params" style="display: none;" class="space-y-6">
+                    <div id="parallelism-section">
+                        <label for="parallelism" class="block text-sm font-medium text-gray-700 flex items-center">
+                            Parallelism Strategy
+                            <div class="tooltip ml-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
+                                <span class="tooltip-text">Choose a strategy. 'Automatic' is best for most cases. Use others for specific needs like maximizing throughput (Data Parallelism) or fitting very large models (Tensor/Pipeline).</span>
+                            </div>
+                        </label>
+                        <select id="parallelism" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                            <option value="automatic">Automatic (Recommended)</option>
+                            <option value="data">Data Parallelism</option>
+                            <option value="tensor_pipeline">Tensor + Pipeline Parallelism</option>
+                        </select>
+                    </div>
+
+                    <div id="training-params" style="display: none;" class="space-y-6 mt-6">
                          <div>
                             <label for="trainingType" class="block text-sm font-medium text-gray-700">Training Type</label>
                             <select id="trainingType" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -60,8 +100,7 @@
                         </div>
                     </div>
 
-                    <!-- Inference Specific Params -->
-                    <div id="inference-params" class="space-y-6">
+                    <div id="inference-params" class="space-y-6 mt-6">
                         <div>
                             <label for="contextLength" class="block text-sm font-medium text-gray-700">Context Length (Tokens)</label>
                             <input type="number" id="contextLength" value="4096" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
@@ -81,7 +120,6 @@
                 </div>
             </div>
 
-            <!-- Results Column -->
             <div class="lg:col-span-2">
                 <div id="results-container" class="bg-white p-6 rounded-xl shadow-lg min-h-full">
                     <div id="summary-section"></div>
@@ -159,6 +197,7 @@
         const trainingParamsEl = document.getElementById('training-params');
         const inferenceParamsEl = document.getElementById('inference-params');
         const trainingTypeEl = document.getElementById('trainingType');
+        const parallelismEl = document.getElementById('parallelism');
 
         // --- LOGIC ---
         function handleFormState() {
@@ -171,6 +210,7 @@
             const task = taskEl.value;
             const modelSize = parseFloat(modelSizeEl.value) || 0;
             const quantizationBytes = parseFloat(quantizationEl.value) || 0;
+            const parallelism = parallelismEl.value;
             
             summaryEl.innerHTML = '';
             recommendationsEl.innerHTML = '';
@@ -184,10 +224,6 @@
             let requiredMemory = 0;
             let calculationBreakdown = {};
             let finePrint = '';
-            let parallelismRec = {
-                type: 'None',
-                note: 'Your model fits on a single accelerator; no parallelism is required.'
-            };
 
             if (task === 'inference') {
                 const contextLength = parseInt(contextLengthEl.value, 10) || 0;
@@ -210,8 +246,8 @@
             }
             
             renderSummary(requiredMemory, calculationBreakdown, finePrint);
-            const recommendation = findAndRenderInstances(requiredMemory);
-            renderGuidance(recommendation);
+            const recommendationType = findAndRenderInstances(requiredMemory, parallelism);
+            renderGuidance(recommendationType);
         }
 
         function calculateInferenceMemory(modelSize, quantizationBytes, contextLength, batchSize) {
@@ -251,8 +287,8 @@
                 finePrint = `<strong>Full-Tuning Calculation:</strong> VRAM ≈ Weights + Gradients + Optimizer States + Overhead.`;
             } else { // PEFT
                 const weightsMemory = modelSize * quantizationBytes;
-                const loraOverhead = weightsMemory * 0.15; // 15% of model size for adapters/optimizer
-                const frameworkOverhead = 2.0; // Fixed framework overhead
+                const loraOverhead = weightsMemory * 0.15;
+                const frameworkOverhead = 2.0;
                 requiredMemory = weightsMemory + loraOverhead + frameworkOverhead;
                  breakdown = {
                     "Base Model Weights": `${weightsMemory.toFixed(2)} GB`,
@@ -274,33 +310,50 @@
             return { layers, hiddenDim };
         }
 
-        function findAndRenderInstances(requiredMemory) {
+        function findAndRenderInstances(requiredMemory, parallelism) {
             let html = '<h2 class="text-xl font-semibold mb-4">3. Instance Recommendations</h2>';
             let recommendationType = 'none';
+
+            if (parallelism === 'automatic') {
+                const singleGpuFits = instanceData.filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
+                if (singleGpuFits.length > 0) {
+                    html += renderInstanceSection('Single Accelerator Instances', singleGpuFits, 'single');
+                    recommendationType = 'single';
+                }
+
+                const multiGpuFits = instanceData.filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.gpuMemoryPerGpu < requiredMemory && inst.price > 0);
+                if (multiGpuFits.length > 0) {
+                    html += renderInstanceSection('Multi-Accelerator Instances', multiGpuFits, 'multi');
+                    recommendationType = recommendationType === 'single' ? 'single_and_multi' : 'multi';
+                }
+
+                if (recommendationType === 'none' && requiredMemory > 0) {
+                    html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
+                    recommendationType = 'cluster';
+                }
+            } else if (parallelism === 'data') {
+                const singleGpuFits = instanceData.filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
+                if (singleGpuFits.length > 0) {
+                     html += renderDataParallelismSection('Data Parallelism Recommendations', singleGpuFits);
+                     recommendationType = 'data';
+                }
+            } else if (parallelism === 'tensor_pipeline') {
+                const multiGpuFits = instanceData.filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.price > 0);
+                 if (multiGpuFits.length > 0) {
+                    html += renderInstanceSection('Tensor/Pipeline Parallelism Recommendations', multiGpuFits, 'multi');
+                    recommendationType = 'multi';
+                } else if (requiredMemory > 0) {
+                    html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
+                    recommendationType = 'cluster';
+                }
+            }
             
-            const singleGpuFits = instanceData.filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
-            if (singleGpuFits.length > 0) {
-                html += renderInstanceSection('Single Accelerator Instances', singleGpuFits, 'single');
-                recommendationType = 'single';
-            }
-
-            const multiGpuFits = instanceData.filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.gpuMemoryPerGpu < requiredMemory && inst.price > 0);
-            if (multiGpuFits.length > 0) {
-                html += renderInstanceSection('Multi-Accelerator Instances', multiGpuFits, 'multi');
-                recommendationType = recommendationType === 'single' ? 'single_and_multi' : 'multi';
-            }
-
-            if (recommendationType === 'none' && requiredMemory > 0) {
-                 html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
-                 recommendationType = 'cluster';
-            }
-
             if (recommendationType === 'none') {
                 html += `<div class="text-center p-6 border-2 border-dashed rounded-lg">
-                            <p class="font-semibold text-gray-700">No suitable instance found for ${requiredMemory.toFixed(2)} GB requirement.</p>
-                            <p class="text-sm text-gray-500 mt-1">Your model might be too large for available instances. Consider reducing model size or using more aggressive quantization.</p>
+                            <p class="font-semibold text-gray-700">No suitable instance found for ${requiredMemory.toFixed(2)} GB requirement and the selected parallelism strategy.</p>
                         </div>`;
             }
+
             recommendationsEl.innerHTML = html;
             return recommendationType;
         }
@@ -328,7 +381,7 @@
                 </div>
             `;
         }
-
+        
         function renderInstanceSection(title, instances, type) {
             const memoryKey = type === 'single' ? 'gpuMemoryPerGpu' : 'totalGpuMemory';
             
@@ -387,6 +440,28 @@
             `;
         }
 
+        function renderDataParallelismSection(title, instances) {
+             const bestInstance = [...instances].sort((a,b) => (a.price / a.gpuMemoryPerGpu) - (b.price / b.gpuMemoryPerGpu))[0];
+
+             let html = `
+                <div class="border border-indigo-500 bg-indigo-50 rounded-lg p-3">
+                    <div class="flex justify-between items-start">
+                        <p class="font-semibold text-indigo-700 flex items-center">${bestInstance.name} (or similar)</p>
+                         <span class="text-xs font-semibold bg-sky-100 text-sky-800 px-2 py-1 rounded-full ml-3">Recommended Node</span>
+                    </div>
+                     <p class="text-sm text-gray-600 mt-1">
+                        Deploy multiple replicas of this instance to increase throughput. For example, deploying 4 nodes would handle 4x the concurrent requests for a total cost of <strong>$${(bestInstance.price * 4).toFixed(2)}/hr</strong>.
+                    </p>
+                </div>
+             `;
+             return `
+                <div class="mt-4">
+                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
+                    <div class="mt-2 space-y-2">${html}</div>
+                </div>
+            `;
+        }
+
         function renderClusterSection(title, requiredMemory) {
              const clusterCandidates = instanceData.filter(inst => 
                 ['p5.48xlarge', 'p6-b200.48xlarge', 'trn1n.32xlarge'].includes(inst.name) && inst.price > 0
@@ -403,11 +478,7 @@
             }).sort((a,b) => a.totalClusterCost - b.totalClusterCost);
 
             let clusterHtml = clusterConfigs.map(config => {
-                 const colorClass = {
-                    'GPU': 'bg-green-100 text-green-800',
-                    'Trainium': 'bg-yellow-100 text-yellow-800',
-                }[config.type];
-
+                 const colorClass = { 'GPU': 'bg-green-100 text-green-800', 'Trainium': 'bg-yellow-100 text-yellow-800' }[config.type];
                 return `
                      <div class="border border-indigo-500 bg-indigo-50 rounded-lg p-3">
                         <div class="flex justify-between items-start">
@@ -447,14 +518,16 @@
             }
 
             guidanceEl.innerHTML = `
-                <h2 class="text-xl font-semibold mb-4 border-t pt-6">4. Parallelism Strategy & Guidance</h2>
+                <h2 class="text-xl font-semibold mb-4 border-t pt-6">4. Fine Print & Guidance</h2>
                 <div class="space-y-4 text-sm">
                     ${parallelismHtml}
                     <div class="p-3 bg-gray-100 rounded-lg">
-                        <h4 class="font-bold text-gray-800">Other Parallelism Strategies</h4>
+                        <h4 class="font-bold text-gray-800">Parallelism Strategies Explained</h4>
                         <ul class="list-disc list-inside mt-2 space-y-2 text-gray-700">
-                            <li><strong>Data Parallelism:</strong> Use this when your model fits on a single accelerator but you want to speed up training by processing larger batches across multiple accelerators. It is primarily for increasing throughput, not for fitting larger models.</li>
-                            <li><strong>Expert Parallelism:</strong> A specialized technique required for Mixture-of-Experts (MoE) models. If your model uses an MoE architecture, this parallelism dimension is mandatory.</li>
+                           <li><strong>Data Parallelism:</strong> Replicates the model across multiple accelerators. It's used to increase <span class="font-semibold">throughput</span> (e.g., more requests per second), not to fit larger models. Best for when a model already fits on a single accelerator.</li>
+                            <li><strong>Tensor Parallelism:</strong> Splits a single layer of a model across multiple accelerators. This is necessary when the weights of a single layer are too large for one accelerator's memory.</li>
+                             <li><strong>Pipeline Parallelism:</strong> Splits the entire model, assigning different layers to different accelerators. This is necessary when the full model is too deep to fit on one accelerator, even with Tensor Parallelism.</li>
+                             <li><strong>Expert Parallelism:</strong> A special technique required only for Mixture-of-Experts (MoE) models to route data to the correct "expert" layers.</li>
                         </ul>
                     </div>
                 </div>
@@ -464,6 +537,8 @@
         // --- EVENT LISTENERS ---
         calculateBtn.addEventListener('click', calculateAndDisplay);
         taskEl.addEventListener('change', handleFormState);
+        parallelismEl.addEventListener('change', calculateAndDisplay);
+
 
         // --- Initial Load ---
         window.onload = () => {
