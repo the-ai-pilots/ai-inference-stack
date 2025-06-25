@@ -184,6 +184,10 @@
             let requiredMemory = 0;
             let calculationBreakdown = {};
             let finePrint = '';
+            let parallelismRec = {
+                type: 'None',
+                note: 'Your model fits on a single accelerator; no parallelism is required.'
+            };
 
             if (task === 'inference') {
                 const contextLength = parseInt(contextLengthEl.value, 10) || 0;
@@ -206,8 +210,8 @@
             }
             
             renderSummary(requiredMemory, calculationBreakdown, finePrint);
-            findAndRenderInstances(requiredMemory);
-            renderGuidance();
+            const recommendation = findAndRenderInstances(requiredMemory);
+            renderGuidance(recommendation);
         }
 
         function calculateInferenceMemory(modelSize, quantizationBytes, contextLength, batchSize) {
@@ -272,32 +276,33 @@
 
         function findAndRenderInstances(requiredMemory) {
             let html = '<h2 class="text-xl font-semibold mb-4">3. Instance Recommendations</h2>';
-            let found = false;
+            let recommendationType = 'none';
             
             const singleGpuFits = instanceData.filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
             if (singleGpuFits.length > 0) {
                 html += renderInstanceSection('Single Accelerator Instances', singleGpuFits, 'single');
-                found = true;
+                recommendationType = 'single';
             }
 
             const multiGpuFits = instanceData.filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.gpuMemoryPerGpu < requiredMemory && inst.price > 0);
             if (multiGpuFits.length > 0) {
-                html += renderInstanceSection('Multi-Accelerator Instances (Requires Model Parallelism)', multiGpuFits, 'multi');
-                found = true;
+                html += renderInstanceSection('Multi-Accelerator Instances', multiGpuFits, 'multi');
+                recommendationType = recommendationType === 'single' ? 'single_and_multi' : 'multi';
             }
 
-            if (!found && requiredMemory > 0) {
+            if (recommendationType === 'none' && requiredMemory > 0) {
                  html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
-                 found = true;
+                 recommendationType = 'cluster';
             }
 
-            if (!found) {
+            if (recommendationType === 'none') {
                 html += `<div class="text-center p-6 border-2 border-dashed rounded-lg">
                             <p class="font-semibold text-gray-700">No suitable instance found for ${requiredMemory.toFixed(2)} GB requirement.</p>
                             <p class="text-sm text-gray-500 mt-1">Your model might be too large for available instances. Consider reducing model size or using more aggressive quantization.</p>
                         </div>`;
             }
             recommendationsEl.innerHTML = html;
+            return recommendationType;
         }
 
         // --- Rendering Logic ---
@@ -412,9 +417,6 @@
                         <p class="text-sm text-gray-600 mt-1">
                            Total Memory: <span class="font-medium">${config.totalClusterMemory.toLocaleString()} GB</span> | Type: <span class="font-semibold px-1 py-0.5 rounded ${colorClass}">${config.type}</span>
                         </p>
-                         <p class="text-xs text-gray-500 mt-1">
-                            Requires advanced multi-node parallelism frameworks like FSDP.
-                        </p>
                     </div>
                 `
             }).join('');
@@ -428,28 +430,32 @@
         }
 
 
-        function renderGuidance() {
+        function renderGuidance(recommendationType) {
+            let parallelismHtml = '';
+            if (recommendationType === 'multi' || recommendationType === 'single_and_multi') {
+                parallelismHtml = `
+                    <div class="p-3 bg-blue-50 rounded-lg">
+                        <h4 class="font-bold text-blue-800">Recommended Strategy: Model Parallelism</h4>
+                        <p class="text-blue-700">Your model is too large for a single accelerator but fits on a multi-accelerator instance. Use a combination of <strong class="font-semibold">Tensor Parallelism</strong> (splitting layers across accelerators) and <strong class="font-semibold">Pipeline Parallelism</strong> (splitting the whole model layer-by-layer) to distribute the workload.</p>
+                    </div>`;
+            } else if (recommendationType === 'cluster') {
+                 parallelismHtml = `
+                    <div class="p-3 bg-red-50 rounded-lg">
+                        <h4 class="font-bold text-red-800">Recommended Strategy: Multi-Node Parallelism (FSDP)</h4>
+                        <p class="text-red-700">Your model is too large for any single server. You will need a multi-node cluster. The recommended approach is <strong class="font-semibold">Fully Sharded Data Parallelism (FSDP)</strong>, which shards the model's weights, gradients, and optimizer states across all accelerators in the cluster. This is the most memory-efficient method for very large scale training.</p>
+                    </div>`;
+            }
+
             guidanceEl.innerHTML = `
-                <h2 class="text-xl font-semibold mb-4 border-t pt-6">Fine Print & Guidance</h2>
+                <h2 class="text-xl font-semibold mb-4 border-t pt-6">4. Parallelism Strategy & Guidance</h2>
                 <div class="space-y-4 text-sm">
+                    ${parallelismHtml}
                     <div class="p-3 bg-gray-100 rounded-lg">
-                        <h4 class="font-bold text-gray-800">Calculation Components Explained</h4>
+                        <h4 class="font-bold text-gray-800">Other Parallelism Strategies</h4>
                         <ul class="list-disc list-inside mt-2 space-y-2 text-gray-700">
-                            <li><strong>KV Cache:</strong> During inference, the model stores Key/Value pairs for each token in the context to avoid reprocessing. Its size depends on <span class="font-semibold">Context Length</span> and <span class="font-semibold">Batch Size</span>, and it can be a major memory consumer for long-context models.</li>
-                            <li><strong>Framework Overhead:</strong> This is a buffer for memory used by the ML framework (PyTorch/TensorFlow), CUDA kernels, and GPU drivers. It's estimated as the larger of 2GB or 10% of model weight memory.</li>
+                            <li><strong>Data Parallelism:</strong> Use this when your model fits on a single accelerator but you want to speed up training by processing larger batches across multiple accelerators. It is primarily for increasing throughput, not for fitting larger models.</li>
+                            <li><strong>Expert Parallelism:</strong> A specialized technique required for Mixture-of-Experts (MoE) models. If your model uses an MoE architecture, this parallelism dimension is mandatory.</li>
                         </ul>
-                    </div>
-                     <div class="p-3 bg-green-50 rounded-lg">
-                        <h4 class="font-bold text-green-800">NVIDIA GPUs (G/P-series)</h4>
-                        <p class="text-green-700"><strong>Use when:</strong> You need maximum flexibility, are prototyping quickly, or your model/framework isn't optimized for Neuron. P-series (P4/P5/P6) offer top-tier performance for training large models. G-series (G5/G6) offer great price-performance for inference.</p>
-                    </div>
-                    <div class="p-3 bg-purple-50 rounded-lg">
-                        <h4 class="font-bold text-purple-800">AWS Inferentia</h4>
-                        <p class="text-purple-700"><strong>Use when:</strong> Your main goal is the lowest cost-per-inference at high throughput. This requires compiling the model with the AWS Neuron SDK, but can lead to significant cost savings in production.</p>
-                    </div>
-                    <div class="p-3 bg-yellow-50 rounded-lg">
-                        <h4 class="font-bold text-yellow-800">AWS Trainium</h4>
-                        <p class="text-yellow-700"><strong>Use when:</strong> Your goal is the lowest cost-to-train for large models. Like Inferentia, this requires the Neuron SDK but is highly optimized for distributed training and can be much cheaper than GPU clusters for long training jobs.</p>
                     </div>
                 </div>
             `;
