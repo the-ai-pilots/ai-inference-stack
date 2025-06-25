@@ -241,8 +241,7 @@
             let finePrint = '';
 
             if (parallelism === 'expert') {
-                const trainingType = trainingTypeEl.value;
-                const { memory, breakdown, finePrint: fp } = calculateExpertMemory(modelSize, quantizationBytes, trainingType);
+                const { memory, breakdown, finePrint: fp } = calculateExpertMemory(modelSize, quantizationBytes, task);
                 requiredMemory = memory;
                 calculationBreakdown = breakdown;
                 finePrint = fp;
@@ -318,7 +317,7 @@
             return { memory: requiredMemory, breakdown, finePrint };
         }
 
-        function calculateExpertMemory(expertSize, quantizationBytes, trainingType) {
+        function calculateExpertMemory(expertSize, quantizationBytes, task) {
             const numExperts = parseInt(numExpertsEl.value, 10) || 1;
             const expertsPerNode = parseInt(expertsPerNodeEl.value, 10) || 1;
 
@@ -326,7 +325,16 @@
                  return { memory: 0, breakdown: {}, finePrint: 'Invalid expert configuration.' };
             }
             
-            const { memory: singleExpertMemory } = calculateStandardTrainingMemory(expertSize, quantizationBytes, trainingType);
+            let singleExpertMemory = 0;
+            if (task === 'training') {
+                const trainingType = trainingTypeEl.value;
+                singleExpertMemory = calculateStandardTrainingMemory(expertSize, quantizationBytes, trainingType).memory;
+            } else { // inference
+                 const contextLength = parseInt(contextLengthEl.value, 10) || 0;
+                 const batchSize = parseInt(batchSizeEl.value, 10) || 0;
+                 singleExpertMemory = calculateInferenceMemory(expertSize, quantizationBytes, contextLength, batchSize).memory;
+            }
+
             const requiredMemoryPerNode = singleExpertMemory * expertsPerNode;
             
             const breakdown = {
