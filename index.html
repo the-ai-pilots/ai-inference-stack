@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EC2 LLM Instance Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="./output.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">EC2 LLM Instance Calculator</h1>
+            <p class="mt-2 text-lg text-gray-600">Find the most cost-optimized AWS instance for your LLM workloads.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Input Controls Column -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-2xl font-semibold mb-6 border-b pb-4">1. Configure Your Workload</h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label for="task" class="block text-sm font-medium text-gray-700">Primary Task</label>
+                        <select id="task" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                            <option value="inference">Inference</option>
+                            <option value="training">Training</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="modelSize" class="block text-sm font-medium text-gray-700">Model Size (Billion Parameters)</label>
+                        <input type="number" id="modelSize" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                    </div>
+                    
+                    <div>
+                        <label for="quantization" class="block text-sm font-medium text-gray-700">Precision / Quantization</label>
+                        <select id="quantization" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                            <option value="2">FP16 / BF16 (2 bytes/param)</option>
+                            <option value="1">INT8 (1 byte/param)</option>
+                            <option value="0.5">INT4 (0.5 bytes/param)</option>
+                            <option value="4">FP32 (4 bytes/param)</option>
+                        </select>
+                    </div>
+
+                    <!-- Training Specific Params -->
+                    <div id="training-params" style="display: none;" class="space-y-6">
+                         <div>
+                            <label for="trainingType" class="block text-sm font-medium text-gray-700">Training Type</label>
+                            <select id="trainingType" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                                <option value="full">Full Fine-Tuning (Adam)</option>
+                                <option value="peft">PEFT (e.g., LoRA)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Inference Specific Params -->
+                    <div id="inference-params" class="space-y-6">
+                        <div>
+                            <label for="contextLength" class="block text-sm font-medium text-gray-700">Context Length (Tokens)</label>
+                            <input type="number" id="contextLength" value="4096" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                        </div>
+
+                        <div>
+                            <label for="batchSize" class="block text-sm font-medium text-gray-700">Concurrent Requests (Batch Size)</label>
+                            <input type="number" id="batchSize" value="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8">
+                    <button id="calculateBtn" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-300">
+                        Calculate & Find Instances
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Column -->
+            <div class="lg:col-span-2">
+                <div id="results-container" class="bg-white p-6 rounded-xl shadow-lg min-h-full">
+                    <div id="summary-section"></div>
+                    <div id="recommendations-section" class="mt-6"></div>
+                    <div id="guidance-section" class="mt-6"></div>
+                     <div id="disclaimer" class="mt-6 text-xs text-gray-500 italic">
+                        <p><strong>Disclaimer:</strong> This is an estimation tool. Calculations are based on common heuristics. Instance data and pricing are based on the provided `us-east-2` (Ohio) documents and may change. Always perform your own testing and benchmarking before making a final decision.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA (VERIFIED & EXPANDED with pricing) ---
+        const instanceData = [
+            // P6
+            { name: 'p6-b200.48xlarge', vcpu: 192, memory: 2048, gpuType: 'NVIDIA Blackwell', gpus: 8, gpuMemoryPerGpu: 180, totalGpuMemory: 1440, type: 'GPU', price: 113.9328 },
+            // P5
+            { name: 'p5.48xlarge', vcpu: 192, memory: 2048, gpuType: 'NVIDIA H100', gpus: 8, gpuMemoryPerGpu: 80, totalGpuMemory: 640, type: 'GPU', price: 55.0400 },
+            // P4
+            { name: 'p4d.24xlarge', vcpu: 96, memory: 1152, gpuType: 'NVIDIA A100', gpus: 8, gpuMemoryPerGpu: 40, totalGpuMemory: 320, type: 'GPU', price: 21.9576 },
+            { name: 'p4de.24xlarge', vcpu: 96, memory: 1152, gpuType: 'NVIDIA A100', gpus: 8, gpuMemoryPerGpu: 80, totalGpuMemory: 640, type: 'GPU', price: 0 },
+            // G6e
+            { name: 'g6e.xlarge', vcpu: 4, memory: 32, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 1.8610 },
+            { name: 'g6e.2xlarge', vcpu: 8, memory: 64, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 2.2420 },
+            { name: 'g6e.4xlarge', vcpu: 16, memory: 128, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 3.0042 },
+            { name: 'g6e.8xlarge', vcpu: 32, memory: 256, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 4.5285 },
+            { name: 'g6e.16xlarge', vcpu: 64, memory: 512, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 7.5771 },
+            { name: 'g6e.12xlarge', vcpu: 48, memory: 384, gpuType: 'NVIDIA L40S', gpus: 4, gpuMemoryPerGpu: 48, totalGpuMemory: 192, type: 'GPU', price: 10.4926 },
+            { name: 'g6e.24xlarge', vcpu: 96, memory: 768, gpuType: 'NVIDIA L40S', gpus: 4, gpuMemoryPerGpu: 48, totalGpuMemory: 192, type: 'GPU', price: 15.0655 },
+            { name: 'g6e.48xlarge', vcpu: 192, memory: 1536, gpuType: 'NVIDIA L40S', gpus: 8, gpuMemoryPerGpu: 48, totalGpuMemory: 384, type: 'GPU', price: 30.1311 },
+            // G6
+            { name: 'g6.xlarge', vcpu: 4, memory: 16, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 0.8048 },
+            { name: 'g6.2xlarge', vcpu: 8, memory: 32, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 0.9776 },
+            { name: 'g6.4xlarge', vcpu: 16, memory: 64, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.3232 },
+            { name: 'g6.8xlarge', vcpu: 32, memory: 128, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 2.0144 },
+            { name: 'g6.16xlarge', vcpu: 64, memory: 256, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 3.3968 },
+            { name: 'g6.12xlarge', vcpu: 48, memory: 192, gpuType: 'NVIDIA L4', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 4.6016 },
+            { name: 'g6.24xlarge', vcpu: 96, memory: 384, gpuType: 'NVIDIA L4', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 6.6752 },
+            { name: 'g6.48xlarge', vcpu: 192, memory: 768, gpuType: 'NVIDIA L4', gpus: 8, gpuMemoryPerGpu: 24, totalGpuMemory: 192, type: 'GPU', price: 13.3504 },
+            // G5
+            { name: 'g5.xlarge', vcpu: 4, memory: 16, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.0060 },
+            { name: 'g5.2xlarge', vcpu: 8, memory: 32, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.2120 },
+            { name: 'g5.4xlarge', vcpu: 16, memory: 64, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.6240 },
+            { name: 'g5.8xlarge', vcpu: 32, memory: 128, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 2.4480 },
+            { name: 'g5.16xlarge', vcpu: 64, memory: 256, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 4.0960 },
+            { name: 'g5.12xlarge', vcpu: 48, memory: 192, gpuType: 'NVIDIA A10G', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 5.6720 },
+            { name: 'g5.24xlarge', vcpu: 96, memory: 384, gpuType: 'NVIDIA A10G', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 8.1440 },
+            { name: 'g5.48xlarge', vcpu: 192, memory: 768, gpuType: 'NVIDIA A10G', gpus: 8, gpuMemoryPerGpu: 24, totalGpuMemory: 192, type: 'GPU', price: 16.2880 },
+             // TRN2
+            { name: 'trn2.48xlarge', vcpu: 192, memory: 2048, gpuType: 'Trainium2', gpus: 16, gpuMemoryPerGpu: 96, totalGpuMemory: 1536, type: 'Trainium', price: 0 },
+            // TRN1
+            { name: 'trn1.2xlarge', vcpu: 8, memory: 32, gpuType: 'Trainium', gpus: 1, gpuMemoryPerGpu: 32, totalGpuMemory: 32, type: 'Trainium', price: 1.3437 },
+            { name: 'trn1.32xlarge', vcpu: 128, memory: 512, gpuType: 'Trainium', gpus: 16, gpuMemoryPerGpu: 32, totalGpuMemory: 512, type: 'Trainium', price: 21.5000 },
+            { name: 'trn1n.32xlarge', vcpu: 128, memory: 512, gpuType: 'Trainium', gpus: 16, gpuMemoryPerGpu: 32, totalGpuMemory: 512, type: 'Trainium', price: 24.7800 },
+            // INF2
+            { name: 'inf2.xlarge', vcpu: 4, memory: 16, gpuType: 'Inferentia2', gpus: 1, gpuMemoryPerGpu: 32, totalGpuMemory: 32, type: 'Inferentia', price: 0.7582 },
+            { name: 'inf2.8xlarge', vcpu: 32, memory: 128, gpuType: 'Inferentia2', gpus: 1, gpuMemoryPerGpu: 32, totalGpuMemory: 32, type: 'Inferentia', price: 1.9678 },
+            { name: 'inf2.24xlarge', vcpu: 96, memory: 384, gpuType: 'Inferentia2', gpus: 6, gpuMemoryPerGpu: 32, totalGpuMemory: 192, type: 'Inferentia', price: 6.4906 },
+            { name: 'inf2.48xlarge', vcpu: 192, memory: 768, gpuType: 'Inferentia2', gpus: 12, gpuMemoryPerGpu: 32, totalGpuMemory: 384, type: 'Inferentia', price: 12.9812 },
+        ];
+
+
+        // --- ELEMENTS ---
+        const calculateBtn = document.getElementById('calculateBtn');
+        const taskEl = document.getElementById('task');
+        const modelSizeEl = document.getElementById('modelSize');
+        const quantizationEl = document.getElementById('quantization');
+        const contextLengthEl = document.getElementById('contextLength');
+        const batchSizeEl = document.getElementById('batchSize');
+        const summaryEl = document.getElementById('summary-section');
+        const recommendationsEl = document.getElementById('recommendations-section');
+        const guidanceEl = document.getElementById('guidance-section');
+        const trainingParamsEl = document.getElementById('training-params');
+        const inferenceParamsEl = document.getElementById('inference-params');
+        const trainingTypeEl = document.getElementById('trainingType');
+
+        // --- LOGIC ---
+        function handleFormState() {
+            const task = taskEl.value;
+            trainingParamsEl.style.display = task === 'training' ? 'block' : 'none';
+            inferenceParamsEl.style.display = task === 'inference' ? 'block' : 'none';
+        }
+
+        function calculateAndDisplay() {
+            const task = taskEl.value;
+            const modelSize = parseFloat(modelSizeEl.value) || 0;
+            const quantizationBytes = parseFloat(quantizationEl.value) || 0;
+            
+            summaryEl.innerHTML = '';
+            recommendationsEl.innerHTML = '';
+            guidanceEl.innerHTML = '';
+
+            if (modelSize <= 0) {
+                 summaryEl.innerHTML = `<p class="text-red-600 font-semibold p-4 bg-red-50 rounded-lg">Please enter a valid, positive model size.</p>`;
+                 return;
+            }
+            
+            let requiredMemory = 0;
+            let calculationBreakdown = {};
+            let finePrint = '';
+
+            if (task === 'inference') {
+                const contextLength = parseInt(contextLengthEl.value, 10) || 0;
+                const batchSize = parseInt(batchSizeEl.value, 10) || 0;
+                if (contextLength <= 0 || batchSize <= 0) {
+                    summaryEl.innerHTML = `<p class="text-red-600 font-semibold p-4 bg-red-50 rounded-lg">Please enter valid context length and batch size for inference calculation.</p>`;
+                    return;
+                }
+                const { memory, breakdown } = calculateInferenceMemory(modelSize, quantizationBytes, contextLength, batchSize);
+                requiredMemory = memory;
+                calculationBreakdown = breakdown;
+                finePrint = `<strong>Inference Calculation:</strong> VRAM ≈ (Model Weights) + (KV Cache) + (Overhead).`;
+
+            } else { // training
+                const trainingType = trainingTypeEl.value;
+                const { memory, breakdown, finePrint: fp } = calculateTrainingMemory(modelSize, quantizationBytes, trainingType);
+                requiredMemory = memory;
+                calculationBreakdown = breakdown;
+                finePrint = fp;
+            }
+            
+            renderSummary(requiredMemory, calculationBreakdown, finePrint);
+            findAndRenderInstances(requiredMemory);
+            renderGuidance();
+        }
+
+        function calculateInferenceMemory(modelSize, quantizationBytes, contextLength, batchSize) {
+            const { layers, hiddenDim } = getModelInternals(modelSize);
+            const weightsMemory = modelSize * quantizationBytes;
+            const kvCachePerToken = layers * hiddenDim * 2 * quantizationBytes;
+            const kvCacheMemory = (batchSize * contextLength * kvCachePerToken) / (1024**3);
+            const overheadMemory = Math.max(2.0, weightsMemory * 0.1);
+            const requiredMemory = weightsMemory + kvCacheMemory + overheadMemory;
+            const breakdown = {
+                "Model Weights": `${weightsMemory.toFixed(2)} GB`,
+                "KV Cache": `${kvCacheMemory.toFixed(2)} GB`,
+                "Framework Overhead": `${overheadMemory.toFixed(2)} GB`
+            };
+            return { memory: requiredMemory, breakdown };
+        }
+        
+        function calculateTrainingMemory(modelSize, quantizationBytes, trainingType) {
+            let requiredMemory = 0;
+            let breakdown = {};
+            let finePrint = '';
+            
+            if (trainingType === 'full') {
+                const gradientBytes = 4;
+                const adamStateBytes = 8;
+                const totalMultiplier = quantizationBytes + gradientBytes + adamStateBytes;
+                const memory = modelSize * totalMultiplier;
+                const overhead = Math.max(4.0, memory * 0.1);
+                requiredMemory = memory + overhead;
+                
+                breakdown = {
+                    "Model Weights": `${(modelSize * quantizationBytes).toFixed(2)} GB`,
+                    "Gradients (FP32)": `${(modelSize * gradientBytes).toFixed(2)} GB`,
+                    "Adam States (FP32)": `${(modelSize * adamStateBytes).toFixed(2)} GB`,
+                    "Framework Overhead": `${overhead.toFixed(2)} GB`,
+                };
+                finePrint = `<strong>Full-Tuning Calculation:</strong> VRAM ≈ Weights + Gradients + Optimizer States + Overhead.`;
+            } else { // PEFT
+                const weightsMemory = modelSize * quantizationBytes;
+                const loraOverhead = weightsMemory * 0.15;
+                const overhead = 2.0;
+                requiredMemory = weightsMemory + loraOverhead + overhead;
+                 breakdown = {
+                    "Base Model Weights": `${weightsMemory.toFixed(2)} GB`,
+                    "PEFT/LoRA Layers": `${loraOverhead.toFixed(2)} GB`,
+                    "Framework Overhead": `${overhead.toFixed(2)} GB`,
+                };
+                finePrint = `<strong>PEFT Calculation:</strong> VRAM ≈ Weights + PEFT Adapters + Overhead.`;
+            }
+            return { memory: requiredMemory, breakdown, finePrint };
+        }
+
+        function getModelInternals(paramsInBillions) {
+            if (paramsInBillions <= 7) return { layers: 32, hiddenDim: 4096 };
+            if (paramsInBillions <= 13) return { layers: 40, hiddenDim: 5120 };
+            if (paramsInBillions <= 34) return { layers: 60, hiddenDim: 6656 };
+            if (paramsInBillions <= 70) return { layers: 80, hiddenDim: 8192 };
+            const layers = Math.round(80 + (paramsInBillions - 70) * 0.4); 
+            const hiddenDim = Math.round(8192 + (paramsInBillions - 70) * 24);
+            return { layers, hiddenDim };
+        }
+
+        function findAndRenderInstances(requiredMemory) {
+            const singleGpuFits = instanceData
+                .filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
+
+            const multiGpuFits = instanceData
+                .filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.gpuMemoryPerGpu < requiredMemory && inst.price > 0);
+
+            let html = '<h2 class="text-xl font-semibold mb-4">3. Instance Recommendations</h2>';
+            let found = false;
+            
+            if (singleGpuFits.length > 0) {
+                html += renderInstanceSection('Single Accelerator Instances', singleGpuFits, 'single');
+                found = true;
+            }
+            if (multiGpuFits.length > 0) {
+                html += renderInstanceSection('Multi-Accelerator Instances (Requires Model Parallelism)', multiGpuFits, 'multi');
+                found = true;
+            }
+
+            if (!found) {
+                html += `<div class="text-center p-6 border-2 border-dashed rounded-lg">
+                            <p class="font-semibold text-gray-700">No suitable instance found for ${requiredMemory.toFixed(2)} GB requirement.</p>
+                            <p class="text-sm text-gray-500 mt-1">Your model might be too large for available instances. Consider reducing model size or using more aggressive quantization.</p>
+                        </div>`;
+            }
+            recommendationsEl.innerHTML = html;
+        }
+
+        // --- Rendering Logic ---
+        function renderSummary(requiredMemory, breakdown, finePrint) {
+            let breakdownHtml = Object.entries(breakdown).map(([key, value]) => `
+                <li class="flex justify-between py-1">
+                    <span class="text-gray-600">${key}:</span>
+                    <span class="font-medium text-gray-800">${value}</span>
+                </li>
+            `).join('');
+
+            summaryEl.innerHTML = `
+                <h2 class="text-xl font-semibold mb-2">2. Estimated Memory Requirement</h2>
+                <div class="p-4 bg-gray-100 rounded-lg">
+                    <div class="flex justify-between items-baseline mb-3">
+                        <h3 class="text-lg font-semibold">Total Needed:</h3>
+                        <span class="text-2xl font-bold text-indigo-600">${requiredMemory.toFixed(2)} GB</span>
+                    </div>
+                    <ul class="text-sm space-y-1 border-t pt-2">
+                        ${breakdownHtml}
+                    </ul>
+                    <p class="text-xs text-gray-500 mt-3 border-t pt-2">${finePrint}</p>
+                </div>
+            `;
+        }
+
+        function renderInstanceSection(title, instances, type) {
+            const memoryKey = type === 'single' ? 'gpuMemoryPerGpu' : 'totalGpuMemory';
+            
+            const cheapest = [...instances].sort((a,b) => a.price - b.price)[0];
+            const bestValue = [...instances].sort((a,b) => (a.price / a[memoryKey]) - (b.price / b[memoryKey]))[0];
+
+            let instancesHtml = instances
+                .sort((a,b) => a.price - b.price) 
+                .slice(0, 5) // Limit to top 5 cheapest
+                .map(inst => {
+                
+                const isCheapest = inst.name === cheapest.name;
+                const isBestValue = inst.name === bestValue.name;
+                
+                let badgeHtml = '';
+                if(isCheapest && isBestValue) {
+                    badgeHtml = `<span class="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full ml-3">Lowest Cost & Best Value</span>`;
+                } else if (isCheapest) {
+                    badgeHtml = `<span class="text-xs font-semibold bg-sky-100 text-sky-800 px-2 py-1 rounded-full ml-3">Lowest Cost</span>`;
+                } else if (isBestValue) {
+                     badgeHtml = `<span class="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full ml-3">Best Value ($/GB)</span>`;
+                }
+
+                const colorClass = {
+                    'GPU': 'bg-green-100 text-green-800',
+                    'Inferentia': 'bg-purple-100 text-purple-800',
+                    'Trainium': 'bg-yellow-100 text-yellow-800',
+                }[inst.type];
+                
+                const memoryToShow = inst[memoryKey];
+                const pricePerGb = inst.price / memoryToShow;
+
+                return `
+                    <div class="border rounded-lg p-3 transition-colors ${isCheapest || isBestValue ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}">
+                        <div class="flex justify-between items-start">
+                            <p class="font-semibold text-indigo-700 flex items-center">${inst.name} ${badgeHtml}</p>
+                            <span class="text-base font-bold text-gray-700">$${inst.price.toFixed(4)}/hr</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1">
+                            <span class="font-medium">${inst.gpus}x ${inst.gpuType}</span> | 
+                            Accelerator Memory: <span class="font-medium">${memoryToShow} GB</span> | 
+                            vCPUs: <span class="font-medium">${inst.vcpu}</span>
+                        </p>
+                         <p class="text-xs text-gray-500 mt-1">
+                            Value: <span class="font-semibold text-gray-700">$${pricePerGb.toFixed(4)}</span> per GB | Type: <span class="font-semibold px-1 py-0.5 rounded ${colorClass}">${inst.type}</span>
+                        </p>
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div class="mt-4">
+                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
+                    <div class="mt-2 space-y-2">${instancesHtml}</div>
+                </div>
+            `;
+        }
+
+        function renderGuidance() {
+            guidanceEl.innerHTML = `
+                <h2 class="text-xl font-semibold mb-4 border-t pt-6">Fine Print & Guidance</h2>
+                <div class="space-y-4 text-sm">
+                    <div class="p-3 bg-gray-100 rounded-lg">
+                        <h4 class="font-bold text-gray-800">Calculation Components Explained</h4>
+                        <ul class="list-disc list-inside mt-2 space-y-2 text-gray-700">
+                            <li><strong>KV Cache:</strong> During inference, the model stores Key/Value pairs for each token in the context to avoid reprocessing. Its size depends on <span class="font-semibold">Context Length</span> and <span class="font-semibold">Batch Size</span>, and it can be a major memory consumer for long-context models.</li>
+                            <li><strong>Framework Overhead:</strong> This is a buffer for memory used by the ML framework (PyTorch/TensorFlow), CUDA kernels, and GPU drivers. It's estimated as the larger of 2GB or 10% of model weight memory.</li>
+                        </ul>
+                    </div>
+                     <div class="p-3 bg-green-50 rounded-lg">
+                        <h4 class="font-bold text-green-800">NVIDIA GPUs (G/P-series)</h4>
+                        <p class="text-green-700"><strong>Use when:</strong> You need maximum flexibility, are prototyping quickly, or your model/framework isn't optimized for Neuron. P-series (P4/P5/P6) offer top-tier performance for training large models. G-series (G5/G6) offer great price-performance for inference.</p>
+                    </div>
+                    <div class="p-3 bg-purple-50 rounded-lg">
+                        <h4 class="font-bold text-purple-800">AWS Inferentia</h4>
+                        <p class="text-purple-700"><strong>Use when:</strong> Your main goal is the lowest cost-per-inference at high throughput. This requires compiling the model with the AWS Neuron SDK, but can lead to significant cost savings in production.</p>
+                    </div>
+                    <div class="p-3 bg-yellow-50 rounded-lg">
+                        <h4 class="font-bold text-yellow-800">AWS Trainium</h4>
+                        <p class="text-yellow-700"><strong>Use when:</strong> Your goal is the lowest cost-to-train for large models. Like Inferentia, this requires the Neuron SDK but is highly optimized for distributed training and can be much cheaper than GPU clusters for long training jobs.</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // --- EVENT LISTENERS ---
+        calculateBtn.addEventListener('click', calculateAndDisplay);
+        taskEl.addEventListener('change', handleFormState);
+
+        // --- Initial Load ---
+        window.onload = () => {
+            handleFormState();
+            calculateAndDisplay();
+        };
+
+    </script>
+</body>
+</html>
