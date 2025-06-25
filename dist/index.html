@@ -247,15 +247,15 @@
                 finePrint = `<strong>Full-Tuning Calculation:</strong> VRAM ≈ Weights + Gradients + Optimizer States + Overhead.`;
             } else { // PEFT
                 const weightsMemory = modelSize * quantizationBytes;
-                const loraOverhead = 4.0; 
-                const frameworkOverhead = 2.0;
-                requiredMemory = weightsMemory + loraOverhead + frameworkOverhead;
+                // For PEFT, overhead is minimal. This small buffer ensures that a model requiring exactly X GB
+                // doesn't get filtered out from an instance with exactly X GB of VRAM.
+                const overhead = 0.01; 
+                requiredMemory = weightsMemory + overhead;
                  breakdown = {
                     "Base Model Weights": `${weightsMemory.toFixed(2)} GB`,
-                    "PEFT/Adapter Overhead": `${loraOverhead.toFixed(2)} GB`,
-                    "Framework Overhead": `${frameworkOverhead.toFixed(2)} GB`,
+                    "PEFT & Framework Overhead": `~${overhead.toFixed(2)} GB (Managed)`
                 };
-                finePrint = `<strong>PEFT Calculation:</strong> VRAM ≈ Weights + PEFT Adapters + Overhead. Using a fixed overhead for adapters is more realistic for large models.`;
+                finePrint = `<strong>PEFT Calculation:</strong> VRAM is dominated by the base model's weights. A minimal overhead is added for adapters and optimizer states.`;
             }
             return { memory: requiredMemory, breakdown, finePrint };
         }
