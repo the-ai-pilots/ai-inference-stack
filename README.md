@@ -51,7 +51,7 @@ The price and performance of running an LLM depend heavily on the underlying har
   * You are conducting long, multi-day or multi-week training runs where instance costs are a primary concern.  
 * **Trade-off:** Like Inferentia, it requires using the **AWS Neuron SDK**. It is highly optimized for distributed training and can be much cheaper than equivalent GPU clusters.
 
-## **Understanding the Calculations **
+## **Understanding the Calculations**
 
 The memory estimations are based on common industry heuristics.
 
