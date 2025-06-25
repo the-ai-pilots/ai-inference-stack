@@ -247,15 +247,15 @@
                 finePrint = `<strong>Full-Tuning Calculation:</strong> VRAM ≈ Weights + Gradients + Optimizer States + Overhead.`;
             } else { // PEFT
                 const weightsMemory = modelSize * quantizationBytes;
-                // For PEFT, overhead is minimal. This small buffer ensures that a model requiring exactly X GB
-                // doesn't get filtered out from an instance with exactly X GB of VRAM.
-                const overhead = 0.01; 
-                requiredMemory = weightsMemory + overhead;
+                const loraOverhead = weightsMemory * 0.15; // 15% of model size for adapters/optimizer
+                const frameworkOverhead = 2.0; // Fixed framework overhead
+                requiredMemory = weightsMemory + loraOverhead + frameworkOverhead;
                  breakdown = {
                     "Base Model Weights": `${weightsMemory.toFixed(2)} GB`,
-                    "PEFT & Framework Overhead": `~${overhead.toFixed(2)} GB (Managed)`
+                    "PEFT/Adapter Overhead": `${loraOverhead.toFixed(2)} GB`,
+                    "Framework Overhead": `${frameworkOverhead.toFixed(2)} GB`,
                 };
-                finePrint = `<strong>PEFT Calculation:</strong> VRAM is dominated by the base model's weights. A minimal overhead is added for adapters and optimizer states.`;
+                finePrint = `<strong>PEFT Calculation:</strong> VRAM ≈ Weights + PEFT Adapters (estimated at 15% of model size) + Framework Overhead.`;
             }
             return { memory: requiredMemory, breakdown, finePrint };
         }
@@ -286,7 +286,6 @@
                 found = true;
             }
 
-            // If no single or multi-gpu instance fits, recommend a cluster
             if (!found && requiredMemory > 0) {
                  html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
                  found = true;
@@ -469,4 +468,3 @@
     </script>
 </body>
 </html>
-
