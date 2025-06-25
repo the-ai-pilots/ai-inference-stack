@@ -2,7 +2,7 @@
 
 ## **Overview**
 
-This project is a single-page web application designed to help developers and machine learning engineers estimate the memory requirements for running Large Language Models (LLMs) and find the most cost-optimized Amazon EC2 instances for their workloads.
+This project is to help developers and machine learning engineers estimate the memory requirements for running Large Language Models (LLMs) and find the most cost-optimized Amazon EC2 instances for their workloads.
 
 The calculator takes key model and workload characteristics as input—such as model size, precision, and task (inference or training)—to provide tailored, price-aware instance recommendations.
 
