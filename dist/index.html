@@ -6,7 +6,6 @@
     <title>EC2 LLM Instance Calculator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="./output.css" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -248,15 +247,15 @@
                 finePrint = `<strong>Full-Tuning Calculation:</strong> VRAM ≈ Weights + Gradients + Optimizer States + Overhead.`;
             } else { // PEFT
                 const weightsMemory = modelSize * quantizationBytes;
-                const loraOverhead = weightsMemory * 0.15;
-                const overhead = 2.0;
-                requiredMemory = weightsMemory + loraOverhead + overhead;
+                const loraOverhead = 4.0; // Fixed overhead for LoRA adapters, optimizer, etc.
+                const frameworkOverhead = 2.0;
+                requiredMemory = weightsMemory + loraOverhead + frameworkOverhead;
                  breakdown = {
                     "Base Model Weights": `${weightsMemory.toFixed(2)} GB`,
-                    "PEFT/LoRA Layers": `${loraOverhead.toFixed(2)} GB`,
-                    "Framework Overhead": `${overhead.toFixed(2)} GB`,
+                    "PEFT/Adapter Overhead": `${loraOverhead.toFixed(2)} GB`,
+                    "Framework Overhead": `${frameworkOverhead.toFixed(2)} GB`,
                 };
-                finePrint = `<strong>PEFT Calculation:</strong> VRAM ≈ Weights + PEFT Adapters + Overhead.`;
+                finePrint = `<strong>PEFT Calculation:</strong> VRAM ≈ Weights + PEFT Adapters + Overhead. Using a fixed overhead for adapters is more realistic for large models.`;
             }
             return { memory: requiredMemory, breakdown, finePrint };
         }
@@ -383,7 +382,7 @@
 
         function renderGuidance() {
             guidanceEl.innerHTML = `
-                <h2 class="text-xl font-semibold mb-4 border-t pt-6">Guidance</h2>
+                <h2 class="text-xl font-semibold mb-4 border-t pt-6">Fine Print & Guidance</h2>
                 <div class="space-y-4 text-sm">
                     <div class="p-3 bg-gray-100 rounded-lg">
                         <h4 class="font-bold text-gray-800">Calculation Components Explained</h4>
@@ -421,3 +420,4 @@
     </script>
 </body>
 </html>
+
