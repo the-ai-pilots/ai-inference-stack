@@ -3,637 +3,577 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EC2 LLM Instance Calculator</title>
+    <title>The Modern AI Inference Stack: An Interactive Infographic</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
+            background-color: #F0F4F8; /* Light Blue-Gray */
+            color: #1E293B; /* Slate 800 */
         }
-        .tooltip {
+        .bg-primary-dark { background-color: #0A2463; }
+        .bg-primary-medium { background-color: #3E92CC; }
+        .bg-primary-light { background-color: #D6E6F2; }
+        .text-accent-light { color: #A5D8F3; }
+        .text-accent-dark { color: #1E293B; }
+        .border-accent { border-color: #3E92CC; }
+
+        .chart-container {
             position: relative;
-            display: inline-block;
-            cursor: pointer;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
         }
-        .tooltip .tooltip-text {
-            visibility: hidden;
-            width: 280px;
-            background-color: #555;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 10px;
+
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        
+        .flow-arrow {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .flow-arrow::after {
+            content: '→';
+            font-size: 2rem;
+            color: #3E92CC;
+            font-weight: bold;
+            transform: translateY(-50%);
             position: absolute;
-            z-index: 10;
-            bottom: 125%;
+            top: 50%;
             left: 50%;
-            margin-left: -140px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            font-size: 0.875rem;
-            font-weight: 400;
+            transform: translate(-50%, -50%);
         }
-        .tooltip:hover .tooltip-text {
-            visibility: visible;
-            opacity: 1;
+        
+        .flow-arrow-down::after {
+            content: '↓';
+        }
+        
+        .kpi-card {
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            border-left: 5px solid #3E92CC;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .kpi-value {
+            font-size: 3rem;
+            font-weight: 900;
+            color: #0A2463;
+        }
+        
+        .kpi-label {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #475569; /* Slate 600 */
+        }
+        .gemini-btn {
+            background-color: #3E92CC;
+            color: white;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.3s;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .gemini-btn:hover {
+            background-color: #0A2463;
+        }
+        .gemini-response {
+            background-color: #ffffff;
+            border: 1px solid #D6E6F2;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0.5rem;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .loader {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #FFF;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="antialiased">
+    <header class="bg-primary-dark text-white p-8 text-center shadow-lg">
+        <h1 class="text-4xl md:text-5xl font-extrabold mb-2">The Modern AI Inference Stack</h1>
+        <p class="text-lg md:text-xl text-accent-light max-w-4xl mx-auto">An interactive deep-dive into the engines, compilers, and strategies accelerating the new era of AI, from cloud to edge.</p>
+    </header>
 
-    <div class="container mx-auto p-4 md:p-8">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-900">EC2 LLM Instance Calculator</h1>
-            <p class="mt-2 text-lg text-gray-600">Find the most cost-optimized AWS instance or cluster for your LLM workloads.</p>
-        </header>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-2xl font-semibold mb-6 border-b pb-4">1. Configure Your Workload</h2>
-                
-                <div class="space-y-6">
-                    <div>
-                        <label for="task" class="block text-sm font-medium text-gray-700">Primary Task</label>
-                        <select id="task" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                            <option value="inference">Inference</option>
-                            <option value="training">Training</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label for="modelSize" class="block text-sm font-medium text-gray-700">Model Size (Billion Parameters)</label>
-                        <input type="number" id="modelSize" value="7" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                    </div>
-                    
-                    <div>
-                        <label for="quantization" class="block text-sm font-medium text-gray-700">Precision / Quantization</label>
-                        <select id="quantization" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                            <option value="2">FP16 / BF16 (2 bytes/param)</option>
-                            <option value="1">INT8 (1 byte/param)</option>
-                            <option value="0.5">INT4 (0.5 bytes/param)</option>
-                            <option value="4">FP32 (4 bytes/param)</option>
-                        </select>
-                    </div>
-
-                    <div id="parallelism-section">
-                        <label for="parallelism" class="block text-sm font-medium text-gray-700 flex items-center">
-                            Parallelism Strategy
-                        </label>
-                        <select id="parallelism" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                            <option value="automatic">Automatic (Recommended)</option>
-                            <option value="data">Data Parallelism</option>
-                            <option value="tensor_pipeline">Tensor + Pipeline Parallelism</option>
-                             <option value="expert">Expert Parallelism (MoE)</option>
-                        </select>
-                    </div>
-                    
-                    <div id="expert-params" style="display: none;" class="space-y-6 border-t pt-6 mt-6 border-dashed">
-                         <h3 class="text-sm font-semibold text-gray-600">Mixture-of-Experts (MoE) Configuration</h3>
-                        <div>
-                            <label for="numExperts" class="block text-sm font-medium text-gray-700">Total Number of Experts</label>
-                            <input type="number" id="numExperts" value="8" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                        </div>
-                         <div>
-                            <label for="expertsPerNode" class="block text-sm font-medium text-gray-700">Experts per Node</label>
-                            <input type="number" id="expertsPerNode" value="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                        </div>
-                    </div>
-
-                    <div id="training-params" style="display: none;" class="space-y-6 mt-6">
-                         <div>
-                            <label for="trainingType" class="block text-sm font-medium text-gray-700">Training Type</label>
-                            <select id="trainingType" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                                <option value="full">Full Fine-Tuning (Adam)</option>
-                                <option value="peft">PEFT (e.g., LoRA)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div id="inference-params" class="space-y-6 mt-6">
-                        <div>
-                            <label for="contextLength" class="block text-sm font-medium text-gray-700">Context Length (Tokens)</label>
-                            <input type="number" id="contextLength" value="4096" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                        </div>
-
-                        <div>
-                            <label for="batchSize" class="block text-sm font-medium text-gray-700">Concurrent Requests (Batch Size)</label>
-                            <input type="number" id="batchSize" value="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2">
-                        </div>
-                    </div>
+    <main class="container mx-auto p-4 md:p-8">
+        
+        <section id="intro" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-4">Inference: Where AI Delivers Value</h2>
+            <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                While model training is a massive capital expense, inference is a continuous operational cost that defines user experience and economic viability. Optimizing inference isn't just about speed; it's a fundamental business necessity. The entire stack, from hardware to software, is being re-imagined to tackle this challenge.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                <div class="kpi-card">
+                    <div class="kpi-value">~80%</div>
+                    <div class="kpi-label">of AI/ML compute costs can be from inference in production.</div>
                 </div>
-
-                <div class="mt-8">
-                    <button id="calculateBtn" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-300">
-                        Calculate & Find Instances
-                    </button>
+                <div class="kpi-card">
+                     <span class="text-5xl font-black text-primary-medium">⚡</span>
+                    <div class="kpi-value">Latency</div>
+                    <div class="kpi-label">The critical metric for real-time user-facing applications.</div>
+                </div>
+                <div class="kpi-card">
+                    <span class="text-5xl font-black text-primary-medium">📈</span>
+                    <div class="kpi-value">Throughput</div>
+                    <div class="kpi-label">The key to cost-efficiency and serving millions of users at scale.</div>
                 </div>
             </div>
+        </section>
 
-            <div class="lg:col-span-2">
-                <div id="results-container" class="bg-white p-6 rounded-xl shadow-lg min-h-full">
-                    <div id="summary-section"></div>
-                    <div id="recommendations-section" class="mt-6"></div>
-                    <div id="guidance-section" class="mt-6"></div>
-                     <div id="disclaimer" class="mt-6 text-xs text-gray-500 italic">
-                        <p><strong>Disclaimer:</strong> This is an estimation tool. Calculations are based on common heuristics. Instance data and pricing are based on the provided `us-east-2` (Ohio) documents and may change. Always perform your own testing and benchmarking before making a final decision.</p>
+        <section id="kv-cache" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-2">The KV Cache: LLM's Memory Bottleneck</h2>
+            <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                Autoregressive generation in LLMs requires storing a "Key-Value Cache" for all previous tokens, which grows unpredictably and consumes enormous amounts of GPU memory. Traditional systems waste 60-80% of this memory due to fragmentation.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4 text-center">The Solution: PagedAttention (vLLM)</h3>
+                    <p class="mb-4 text-center">Inspired by operating systems, PagedAttention treats the KV Cache as virtual memory, allocating it in non-contiguous "blocks" to virtually eliminate waste and enable efficient sharing.</p>
+                    <div class="chart-container h-64 md:h-80"><canvas id="memoryWasteChart"></canvas></div>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4 text-center">From Fragmentation to Efficiency</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <h4 class="font-semibold mb-1">Traditional (Fragmented)</h4>
+                            <div class="bg-primary-light p-2 rounded-lg flex space-x-1">
+                                <div class="bg-red-300 h-8 rounded" style="width: 40%;"></div>
+                                <div class="bg-gray-300 h-8 rounded" style="width: 15%;"></div>
+                                <div class="bg-red-300 h-8 rounded" style="width: 30%;"></div>
+                                <div class="bg-gray-300 h-8 rounded" style="width: 15%;"></div>
+                            </div>
+                            <p class="text-sm mt-1 text-gray-600">Large, contiguous blocks lead to wasted memory (gray areas).</p>
+                        </div>
+                         <div class="text-center text-4xl font-bold text-primary-medium">↓</div>
+                        <div>
+                            <h4 class="font-semibold mb-1">PagedAttention (Efficient)</h4>
+                            <div class="bg-primary-light p-2 rounded-lg flex space-x-1">
+                                <div class="bg-blue-400 h-8 rounded" style="width: 20%;"></div>
+                                <div class="bg-blue-400 h-8 rounded" style="width: 20%;"></div>
+                                <div class="bg-blue-400 h-8 rounded" style="width: 20%;"></div>
+                                <div class="bg-blue-400 h-8 rounded" style="width: 20%;"></div>
+                                <div class="bg-blue-400 h-8 rounded" style="width: 18%;"></div>
+                                <div class="bg-gray-300 h-8 rounded" style="width: 2%;"></div>
+                            </div>
+                             <p class="text-sm mt-1 text-gray-600">Small, non-contiguous blocks minimize waste to <4%.</p>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </section>
+
+        <section id="engine-comparison" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-2">A Landscape of Leading Inference Engines</h2>
+            <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                The modern inference landscape is dominated by specialized engines, each with unique innovations. While some, like vLLM and SGLang, optimize within the existing ecosystem, others like Modular and Apple are building vertically integrated stacks for maximum performance on their target platforms.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4 text-center">Engine Performance Highlights</h3>
+                    <p class="mb-4 text-center">Different engines excel at different tasks. Benchmarks show SGLang's advantage in multi-turn chat, while vLLM is a throughput powerhouse for single-round inference. MAX and MLX show strong performance through full-stack integration.</p>
+                    <div class="chart-container"><canvas id="enginePerfChart"></canvas></div>
+                </div>
+                 <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4 text-center">Latency Deep-Dive: TTFT vs. TPOT</h3>
+                    <p class="mb-4 text-center">For interactive applications, two metrics matter: Time to First Token (TTFT) for perceived responsiveness, and Time Per Output Token (TPOT) for streaming speed. Engines optimize for both, but the balance is key.</p>
+                    <div class="chart-container"><canvas id="latencyChart"></canvas></div>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
+                 <h3 class="text-xl font-bold mb-4 text-center">Feature Comparison</h3>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-primary-light">
+                            <th class="p-3 font-semibold text-sm">Feature</th>
+                            <th class="p-3 font-semibold text-sm">vLLM</th>
+                            <th class="p-3 font-semibold text-sm">SGLang</th>
+                            <th class="p-3 font-semibold text-sm">Modular MAX</th>
+                            <th class="p-3 font-semibold text-sm">Apple MLX</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        <tr>
+                            <td class="p-3 font-medium">Core Tech</td>
+                            <td class="p-3">PagedAttention</td>
+                            <td class="p-3">RadixAttention</td>
+                            <td class="p-3">Mojo Language, MAX Engine</td>
+                            <td class="p-3">Unified Memory, Lazy Compute</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-medium">Best For</td>
+                            <td class="p-3">High-throughput serving</td>
+                            <td class="p-3">Complex apps (chat, agents)</td>
+                            <td class="p-3">Unified, portable stack</td>
+                            <td class="p-3">On-device Apple research</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-medium">Parallelism</td>
+                            <td class="p-3">Tensor, Pipeline</td>
+                            <td class="p-3">Tensor, Pipeline, Data</td>
+                            <td class="p-3">Multi-GPU support</td>
+                            <td class="p-3">Single device focus</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-medium">Ecosystem</td>
+                            <td class="p-3">Python, Ray</td>
+                            <td class="p-3">Python, Transformers</td>
+                            <td class="p-3">Mojo, Python</td>
+                            <td class="p-3">Python, Swift, C++</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="advanced-arch" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-2">Advanced Architectures: Rewriting the Rules of Execution</h2>
+            <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                Beyond memory management, researchers are fundamentally rethinking the execution flow of LLMs to eliminate the final sources of latency and inefficiency: kernel launch overhead and workload interference.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-white p-6 rounded-lg shadow-md text-center">
+                    <h3 class="text-xl font-bold mb-4">The MegaKernel Paradigm</h3>
+                    <p class="mb-4">Instead of thousands of small kernel launches, the entire model is compiled into a single, persistent GPU kernel, eliminating CPU overhead and enabling deep, fine-grained optimizations.</p>
+                    <div class="flex flex-col items-center space-y-4">
+                        <div class="p-4 rounded-lg bg-red-100 border border-red-300 w-full">
+                            <h4 class="font-semibold">Conventional</h4>
+                            <p class="text-sm">CPU ↔ GPU (1000s of launches)</p>
+                        </div>
+                        <div class="text-4xl font-bold text-primary-medium">↓</div>
+                        <div class="p-4 rounded-lg bg-green-100 border border-green-300 w-full">
+                            <h4 class="font-semibold">MegaKernel</h4>
+                            <p class="text-sm">CPU → GPU (1 persistent kernel)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md text-center">
+                    <h3 class="text-xl font-bold mb-4">Prefill-Decode Disaggregation</h3>
+                    <p class="mb-4">Computation-bound "prefill" and memory-bound "decode" tasks are sent to separate, specialized GPU pools, eliminating head-of-line blocking and improving system-wide latency.</p>
+                     <div class="flex flex-col items-center space-y-4">
+                        <div class="p-4 rounded-lg bg-red-100 border border-red-300 w-full">
+                            <h4 class="font-semibold">Co-located (Blocked)</h4>
+                            <div class="flex justify-center space-x-2"><div class="font-bold text-red-500">Long Prefill</div><div class="text-gray-400">Decode</div><div class="text-gray-400">Decode</div></div>
+                        </div>
+                        <div class="text-4xl font-bold text-primary-medium">↓</div>
+                         <div class="p-4 rounded-lg bg-green-100 border border-green-300 w-full">
+                            <h4 class="font-semibold">Disaggregated (Parallel)</h4>
+                            <div class="flex justify-between"><div class="font-bold text-green-600">Prefill Engine</div><div class="font-bold text-green-600">Decode Engine</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="ecosystem" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-2">The Compiler & Runtime Ecosystem</h2>
+            <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                A rich ecosystem of compilers and runtimes bridges the gap between high-level Python code and low-level hardware execution, enabling interoperability and hardware-specific optimization.
+            </p>
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-bold mb-4 text-center">Pathways to Performance</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center items-start">
+                    <div class="p-4 border-2 border-dashed border-accent rounded-lg">
+                        <h4 class="font-bold mb-2">PyTorch / TensorFlow</h4>
+                        <p class="text-sm">High-level model definition</p>
+                    </div>
+                    <div class="flow-arrow flow-arrow-down md:flow-arrow-down-0"></div>
+                     <div class="p-4 rounded-lg bg-primary-light">
+                        <h4 class="font-bold mb-2">ONNX</h4>
+                        <p class="text-sm">The "Lingua Franca" for interoperability</p>
+                    </div>
+                </div>
+                <div class="flex justify-center my-4">
+                     <div class="text-4xl font-bold text-primary-medium -mt-2">↓</div>
+                </div>
+                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    <div class="p-4 border border-accent rounded-lg">
+                        <h4 class="font-bold mb-2">PyTorch 2.x `torch.compile`</h4>
+                        <p class="text-sm">Native JIT compilation for easy speedups.</p>
+                    </div>
+                     <div class="p-4 border border-accent rounded-lg">
+                        <h4 class="font-bold mb-2">NVIDIA TensorRT</h4>
+                        <p class="text-sm">Aggressive optimization for NVIDIA GPUs.</p>
+                    </div>
+                     <div class="p-4 border border-accent rounded-lg">
+                        <h4 class="font-bold mb-2">Intel OpenVINO</h4>
+                        <p class="text-sm">Optimized deployment on Intel CPUs, GPUs & NPUs.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="scaling" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-2">Scaling Inference: From One to Millions</h2>
+            <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                Deploying at scale requires robust orchestration and serving frameworks. The choice depends on the desired balance of raw performance, programmability, and operational consistency.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4 text-center">Cloud vs. Bare-Metal Trade-offs</h3>
+                     <p class="mb-4 text-center">The choice between hyperscale cloud and bare-metal infrastructure involves a fundamental trade-off between on-demand flexibility and raw, predictable performance.</p>
+                    <div class="chart-container"><canvas id="deploymentChart"></canvas></div>
+                    <div class="text-center mt-4">
+                        <button id="explainDeploymentBtn" class="gemini-btn">✨ Explain these Trade-offs</button>
+                    </div>
+                    <div id="deploymentExplanation" class="gemini-response hidden"></div>
+                </div>
+                 <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-bold mb-4 text-center">Serving Framework Comparison</h3>
+                     <p class="mb-4 text-center">Triton excels at raw throughput, Ray Serve offers Pythonic flexibility for complex apps, and KServe provides a seamless, Kubernetes-native deployment experience.</p>
+                    <div class="chart-container"><canvas id="servingFrameworkChart"></canvas></div>
+                    <div class="text-center mt-4">
+                         <button id="explainServingBtn" class="gemini-btn">✨ Explain this Comparison</button>
+                    </div>
+                    <div id="servingExplanation" class="gemini-response hidden"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="future" class="mb-16">
+            <h2 class="text-3xl font-bold text-center mb-2">Future Imperatives: Secure & Sustainable AI</h2>
+             <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                As inference becomes ubiquitous, two non-functional requirements are becoming strategic imperatives: verifiable security through confidential computing and environmental sustainability through Green AI.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="kpi-card text-center">
+                    <div class="text-6xl mb-4">🛡️</div>
+                    <h3 class="text-2xl font-bold mb-2">Confidential Computing</h3>
+                    <p class="text-base text-gray-600">Using hardware-based Trusted Execution Environments (TEEs) to protect sensitive data and proprietary models while they are being processed, even from the cloud provider.</p>
+                </div>
+                <div class="kpi-card text-center">
+                    <div class="text-6xl mb-4">🌿</div>
+                    <h3 class="text-2xl font-bold mb-2">Green AI</h3>
+                    <p class="text-base text-gray-600">A movement to improve the energy efficiency of AI through hardware innovation, model optimization, and transparent benchmarking to reduce its environmental footprint.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="gemini-advisor" class="bg-white p-8 rounded-lg shadow-xl border-t-4 border-accent">
+            <h2 class="text-3xl font-bold text-center mb-2">✨ Strategic AI Advisor</h2>
+            <p class="text-lg text-center max-w-3xl mx-auto mb-8">
+                Get a personalized inference stack recommendation. Tell us about your project, and our AI advisor will suggest a starting point based on the concepts in this infographic.
+            </p>
+            <div class="max-w-2xl mx-auto">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label for="appType" class="block text-sm font-medium text-gray-700 mb-1">Application Type</label>
+                        <select id="appType" class="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                            <option>Real-time User Chatbot</option>
+                            <option>Offline Batch Processing</option>
+                            <option>High-Throughput API Service</option>
+                            <option>On-Device Mobile App</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="priority" class="block text-sm font-medium text-gray-700 mb-1">What is your #1 priority?</label>
+                        <select id="priority" class="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                            <option>Lowest possible latency (TTFT)</option>
+                            <option>Highest request throughput</option>
+                            <option>Ease of deployment & management</option>
+                            <option>Maximum development flexibility</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <button id="getRecommendationBtn" class="gemini-btn text-lg">Get Recommendation</button>
+                </div>
+                <div id="recommendationResponse" class="gemini-response hidden mt-6"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-primary-dark text-white p-4 text-center mt-16">
+        <p>Infographic created based on "The Modern AI Inference Stack" research report. June 2025.</p>
+    </footer>
 
     <script>
-        // --- DATA (VERIFIED & EXPANDED with pricing) ---
-        const instanceData = [
-            // P6
-            { name: 'p6-b200.48xlarge', vcpu: 192, memory: 2048, gpuType: 'NVIDIA Blackwell', gpus: 8, gpuMemoryPerGpu: 180, totalGpuMemory: 1440, type: 'GPU', price: 113.9328 },
-            // P5
-            { name: 'p5.48xlarge', vcpu: 192, memory: 2048, gpuType: 'NVIDIA H100', gpus: 8, gpuMemoryPerGpu: 80, totalGpuMemory: 640, type: 'GPU', price: 55.0400 },
-            // P4
-            { name: 'p4d.24xlarge', vcpu: 96, memory: 1152, gpuType: 'NVIDIA A100', gpus: 8, gpuMemoryPerGpu: 40, totalGpuMemory: 320, type: 'GPU', price: 21.9576 },
-            { name: 'p4de.24xlarge', vcpu: 96, memory: 1152, gpuType: 'NVIDIA A100', gpus: 8, gpuMemoryPerGpu: 80, totalGpuMemory: 640, type: 'GPU', price: 0 },
-            // G6e
-            { name: 'g6e.xlarge', vcpu: 4, memory: 32, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 1.8610 },
-            { name: 'g6e.2xlarge', vcpu: 8, memory: 64, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 2.2420 },
-            { name: 'g6e.4xlarge', vcpu: 16, memory: 128, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 3.0042 },
-            { name: 'g6e.8xlarge', vcpu: 32, memory: 256, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 4.5285 },
-            { name: 'g6e.16xlarge', vcpu: 64, memory: 512, gpuType: 'NVIDIA L40S', gpus: 1, gpuMemoryPerGpu: 48, totalGpuMemory: 48, type: 'GPU', price: 7.5771 },
-            { name: 'g6e.12xlarge', vcpu: 48, memory: 384, gpuType: 'NVIDIA L40S', gpus: 4, gpuMemoryPerGpu: 48, totalGpuMemory: 192, type: 'GPU', price: 10.4926 },
-            { name: 'g6e.24xlarge', vcpu: 96, memory: 768, gpuType: 'NVIDIA L40S', gpus: 4, gpuMemoryPerGpu: 48, totalGpuMemory: 192, type: 'GPU', price: 15.0655 },
-            { name: 'g6e.48xlarge', vcpu: 192, memory: 1536, gpuType: 'NVIDIA L40S', gpus: 8, gpuMemoryPerGpu: 48, totalGpuMemory: 384, type: 'GPU', price: 30.1311 },
-            // G6
-            { name: 'g6.xlarge', vcpu: 4, memory: 16, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 0.8048 },
-            { name: 'g6.2xlarge', vcpu: 8, memory: 32, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 0.9776 },
-            { name: 'g6.4xlarge', vcpu: 16, memory: 64, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.3232 },
-            { name: 'g6.8xlarge', vcpu: 32, memory: 128, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 2.0144 },
-            { name: 'g6.16xlarge', vcpu: 64, memory: 256, gpuType: 'NVIDIA L4', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 3.3968 },
-            { name: 'g6.12xlarge', vcpu: 48, memory: 192, gpuType: 'NVIDIA L4', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 4.6016 },
-            { name: 'g6.24xlarge', vcpu: 96, memory: 384, gpuType: 'NVIDIA L4', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 6.6752 },
-            { name: 'g6.48xlarge', vcpu: 192, memory: 768, gpuType: 'NVIDIA L4', gpus: 8, gpuMemoryPerGpu: 24, totalGpuMemory: 192, type: 'GPU', price: 13.3504 },
-            // G5
-            { name: 'g5.xlarge', vcpu: 4, memory: 16, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.0060 },
-            { name: 'g5.2xlarge', vcpu: 8, memory: 32, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.2120 },
-            { name: 'g5.4xlarge', vcpu: 16, memory: 64, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 1.6240 },
-            { name: 'g5.8xlarge', vcpu: 32, memory: 128, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 2.4480 },
-            { name: 'g5.16xlarge', vcpu: 64, memory: 256, gpuType: 'NVIDIA A10G', gpus: 1, gpuMemoryPerGpu: 24, totalGpuMemory: 24, type: 'GPU', price: 4.0960 },
-            { name: 'g5.12xlarge', vcpu: 48, memory: 192, gpuType: 'NVIDIA A10G', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 5.6720 },
-            { name: 'g5.24xlarge', vcpu: 96, memory: 384, gpuType: 'NVIDIA A10G', gpus: 4, gpuMemoryPerGpu: 24, totalGpuMemory: 96, type: 'GPU', price: 8.1440 },
-            { name: 'g5.48xlarge', vcpu: 192, memory: 768, gpuType: 'NVIDIA A10G', gpus: 8, gpuMemoryPerGpu: 24, totalGpuMemory: 192, type: 'GPU', price: 16.2880 },
-             // TRN2
-            { name: 'trn2.48xlarge', vcpu: 192, memory: 2048, gpuType: 'Trainium2', gpus: 16, gpuMemoryPerGpu: 96, totalGpuMemory: 1536, type: 'Trainium', price: 0 },
-            // TRN1
-            { name: 'trn1.2xlarge', vcpu: 8, memory: 32, gpuType: 'Trainium', gpus: 1, gpuMemoryPerGpu: 32, totalGpuMemory: 32, type: 'Trainium', price: 1.3437 },
-            { name: 'trn1.32xlarge', vcpu: 128, memory: 512, gpuType: 'Trainium', gpus: 16, gpuMemoryPerGpu: 32, totalGpuMemory: 512, type: 'Trainium', price: 21.5000 },
-            { name: 'trn1n.32xlarge', vcpu: 128, memory: 512, gpuType: 'Trainium', gpus: 16, gpuMemoryPerGpu: 32, totalGpuMemory: 512, type: 'Trainium', price: 24.7800 },
-            // INF2
-            { name: 'inf2.xlarge', vcpu: 4, memory: 16, gpuType: 'Inferentia2', gpus: 1, gpuMemoryPerGpu: 32, totalGpuMemory: 32, type: 'Inferentia', price: 0.7582 },
-            { name: 'inf2.8xlarge', vcpu: 32, memory: 128, gpuType: 'Inferentia2', gpus: 1, gpuMemoryPerGpu: 32, totalGpuMemory: 32, type: 'Inferentia', price: 1.9678 },
-            { name: 'inf2.24xlarge', vcpu: 96, memory: 384, gpuType: 'Inferentia2', gpus: 6, gpuMemoryPerGpu: 32, totalGpuMemory: 192, type: 'Inferentia', price: 6.4906 },
-            { name: 'inf2.48xlarge', vcpu: 192, memory: 768, gpuType: 'Inferentia2', gpus: 12, gpuMemoryPerGpu: 32, totalGpuMemory: 384, type: 'Inferentia', price: 12.9812 },
-        ];
+        document.addEventListener('DOMContentLoaded', function () {
+            const primaryColor = '#3E92CC';
+            const secondaryColor = '#0A2463';
+            const lightColor = '#D6E6F2';
+            const accentColor = '#A5D8F3';
 
-
-        // --- ELEMENTS ---
-        const calculateBtn = document.getElementById('calculateBtn');
-        const taskEl = document.getElementById('task');
-        const modelSizeEl = document.getElementById('modelSize');
-        const quantizationEl = document.getElementById('quantization');
-        const contextLengthEl = document.getElementById('contextLength');
-        const batchSizeEl = document.getElementById('batchSize');
-        const summaryEl = document.getElementById('summary-section');
-        const recommendationsEl = document.getElementById('recommendations-section');
-        const guidanceEl = document.getElementById('guidance-section');
-        const trainingParamsEl = document.getElementById('training-params');
-        const inferenceParamsEl = document.getElementById('inference-params');
-        const trainingTypeEl = document.getElementById('trainingType');
-        const parallelismEl = document.getElementById('parallelism');
-        const expertParamsEl = document.getElementById('expert-params');
-        const numExpertsEl = document.getElementById('numExperts');
-        const expertsPerNodeEl = document.getElementById('expertsPerNode');
-
-        // --- LOGIC ---
-        function handleFormState() {
-            const task = taskEl.value;
-            const parallelism = parallelismEl.value;
-            trainingParamsEl.style.display = task === 'training' ? 'block' : 'none';
-            inferenceParamsEl.style.display = task === 'inference' ? 'block' : 'none';
-            expertParamsEl.style.display = parallelism === 'expert' ? 'block' : 'none';
-
-        }
-
-        function calculateAndDisplay() {
-            const task = taskEl.value;
-            const modelSize = parseFloat(modelSizeEl.value) || 0;
-            const quantizationBytes = parseFloat(quantizationEl.value) || 0;
-            const parallelism = parallelismEl.value;
-            
-            summaryEl.innerHTML = '';
-            recommendationsEl.innerHTML = '';
-            guidanceEl.innerHTML = '';
-
-            if (modelSize <= 0) {
-                 summaryEl.innerHTML = `<p class="text-red-600 font-semibold p-4 bg-red-50 rounded-lg">Please enter a valid, positive model size.</p>`;
-                 return;
-            }
-            
-            let requiredMemory = 0;
-            let calculationBreakdown = {};
-            let finePrint = '';
-
-            if (parallelism === 'expert') {
-                const { memory, breakdown, finePrint: fp } = calculateExpertMemory(modelSize, quantizationBytes, task);
-                requiredMemory = memory;
-                calculationBreakdown = breakdown;
-                finePrint = fp;
-            } else if (task === 'inference') {
-                const contextLength = parseInt(contextLengthEl.value, 10) || 0;
-                const batchSize = parseInt(batchSizeEl.value, 10) || 0;
-                if (contextLength <= 0 || batchSize <= 0) {
-                    summaryEl.innerHTML = `<p class="text-red-600 font-semibold p-4 bg-red-50 rounded-lg">Please enter valid context length and batch size for inference calculation.</p>`;
-                    return;
+            const tooltipPlugin = {
+                tooltip: {
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            const item = tooltipItems[0];
+                            let label = item.chart.data.labels[item.dataIndex];
+                            if (Array.isArray(label)) {
+                              return label.join(' ');
+                            } else {
+                              return label;
+                            }
+                        }
+                    }
                 }
-                const { memory, breakdown } = calculateInferenceMemory(modelSize, quantizationBytes, contextLength, batchSize);
-                requiredMemory = memory;
-                calculationBreakdown = breakdown;
-                finePrint = `<strong>Inference Calculation:</strong> VRAM ≈ (Model Weights) + (KV Cache) + (Overhead).`;
-
-            } else { // training
-                const trainingType = trainingTypeEl.value;
-                const { memory, breakdown, finePrint: fp } = calculateStandardTrainingMemory(modelSize, quantizationBytes, trainingType);
-                requiredMemory = memory;
-                calculationBreakdown = breakdown;
-                finePrint = fp;
-            }
-            
-            renderSummary(requiredMemory, calculationBreakdown, finePrint, parallelism);
-            const recommendationType = findAndRenderInstances(requiredMemory, parallelism);
-            renderGuidance(recommendationType);
-        }
-
-        function calculateInferenceMemory(modelSize, quantizationBytes, contextLength, batchSize) {
-            const { layers, hiddenDim } = getModelInternals(modelSize);
-            const weightsMemory = modelSize * quantizationBytes;
-            const kvCachePerToken = layers * hiddenDim * 2 * quantizationBytes;
-            const kvCacheMemory = (batchSize * contextLength * kvCachePerToken) / (1024**3);
-            const overheadMemory = Math.max(2.0, weightsMemory * 0.1);
-            const requiredMemory = weightsMemory + kvCacheMemory + overheadMemory;
-            const breakdown = {
-                "Model Weights": `${weightsMemory.toFixed(2)} GB`,
-                "KV Cache": `${kvCacheMemory.toFixed(2)} GB`,
-                "Framework Overhead": `${overheadMemory.toFixed(2)} GB`
             };
-            return { memory: requiredMemory, breakdown };
-        }
-        
-        function calculateStandardTrainingMemory(modelSize, quantizationBytes, trainingType) {
-            let requiredMemory, breakdown, finePrint;
-             if (trainingType === 'full') {
-                const gradientBytes = 4;
-                const adamStateBytes = 8;
-                const totalMultiplier = quantizationBytes + gradientBytes + adamStateBytes;
-                const memory = modelSize * totalMultiplier;
-                const overhead = Math.max(4.0, memory * 0.1);
-                requiredMemory = memory + overhead;
-                
-                breakdown = {
-                    "Model Weights": `${(modelSize * quantizationBytes).toFixed(2)} GB`,
-                    "Gradients (FP32)": `${(modelSize * gradientBytes).toFixed(2)} GB`,
-                    "Adam States (FP32)": `${(modelSize * adamStateBytes).toFixed(2)} GB`,
-                    "Framework Overhead": `${overhead.toFixed(2)} GB`,
-                };
-                finePrint = `<strong>Full-Tuning Calculation:</strong> VRAM ≈ Weights + Gradients + Optimizer States + Overhead.`;
-            } else { // PEFT
-                const weightsMemory = modelSize * quantizationBytes;
-                const loraOverhead = weightsMemory * 0.15;
-                const frameworkOverhead = 2.0;
-                requiredMemory = weightsMemory + loraOverhead + frameworkOverhead;
-                 breakdown = {
-                    "Base Model Weights": `${weightsMemory.toFixed(2)} GB`,
-                    "PEFT/Adapter Overhead": `${loraOverhead.toFixed(2)} GB`,
-                    "Framework Overhead": `${frameworkOverhead.toFixed(2)} GB`,
-                };
-                finePrint = `<strong>PEFT Calculation:</strong> VRAM ≈ Weights + PEFT Adapters (estimated at 15% of model size) + Framework Overhead.`;
-            }
-            return { memory: requiredMemory, breakdown, finePrint };
-        }
-
-        function calculateExpertMemory(expertSize, quantizationBytes, task) {
-            const numExperts = parseInt(numExpertsEl.value, 10) || 1;
-            const expertsPerNode = parseInt(expertsPerNodeEl.value, 10) || 1;
-
-            if (expertsPerNode <= 0 || numExperts <= 0) {
-                 return { memory: 0, breakdown: {}, finePrint: 'Invalid expert configuration.' };
-            }
             
-            let singleExpertMemory = 0;
-            if (task === 'training') {
-                const trainingType = trainingTypeEl.value;
-                singleExpertMemory = calculateStandardTrainingMemory(expertSize, quantizationBytes, trainingType).memory;
-            } else { // inference
-                 const contextLength = parseInt(contextLengthEl.value, 10) || 0;
-                 const batchSize = parseInt(batchSizeEl.value, 10) || 0;
-                 singleExpertMemory = calculateInferenceMemory(expertSize, quantizationBytes, contextLength, batchSize).memory;
-            }
-
-            const requiredMemoryPerNode = singleExpertMemory * expertsPerNode;
-            
-            const breakdown = {
-                "Total Experts": `${numExperts}`,
-                "Experts per Node": `${expertsPerNode}`,
-                "Est. Memory per Expert": `${singleExpertMemory.toFixed(2)} GB`,
+            const wrapLabel = (label, maxLength = 16) => {
+                if (label.length <= maxLength) return label;
+                const words = label.split(' ');
+                let lines = [];
+                let currentLine = '';
+                for (const word of words) {
+                    if ((currentLine + ' ' + word).trim().length > maxLength) {
+                        lines.push(currentLine.trim());
+                        currentLine = word;
+                    } else {
+                        currentLine = (currentLine + ' ' + word).trim();
+                    }
+                }
+                lines.push(currentLine.trim());
+                return lines;
             };
-            const finePrint = `<strong>MoE Calculation:</strong> Memory per node is based on hosting ${expertsPerNode} expert replica(s). Total cluster size depends on total experts.`;
+
+            const memoryWasteChart = new Chart(document.getElementById('memoryWasteChart'), {
+                type: 'doughnut', data: { labels: ['Wasted Memory (Traditional)', 'Useful Memory'], datasets: [{ data: [70, 30], backgroundColor: [ '#E57373', secondaryColor ], borderColor: '#ffffff', borderWidth: 4, }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, tooltip: tooltipPlugin.tooltip, title: { display: true, text: 'Memory Waste: Traditional vs. PagedAttention' } }, cutout: '60%' }
+            });
+            const enginePerfChart = new Chart(document.getElementById('enginePerfChart'), {
+                type: 'bar', data: { labels: [ wrapLabel('SGLang (Cache Hit Rate vs Baseline)'), wrapLabel('vLLM (Throughput vs HF)'), wrapLabel('Modular MAX (Speed vs vLLM)'), wrapLabel('Apple MLX (Speed vs PyTorch MPS)') ], datasets: [{ label: 'Relative Performance Improvement (Factor)', data: [4, 24, 1.12, 2.5], backgroundColor: [primaryColor, secondaryColor, primaryColor, secondaryColor], borderColor: [primaryColor, secondaryColor, primaryColor, secondaryColor], borderWidth: 1 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipPlugin.tooltip }, scales: { x: { beginAtZero: true, title: { display: true, text: 'Performance Factor (Higher is Better)' } } } }
+            });
+            const latencyChart = new Chart(document.getElementById('latencyChart'), {
+                type: 'bar', data: { labels: ['Interactive Chat', 'Code Generation', 'Summarization'], datasets: [ { label: 'Time to First Token (ms)', data: [150, 400, 300], backgroundColor: primaryColor, }, { label: 'Time Per Output Token (ms)', data: [40, 35, 55], backgroundColor: secondaryColor, } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, tooltip: tooltipPlugin.tooltip, }, scales: { y: { beginAtZero: true, title: { display: true, text: 'Latency (ms)' } } } }
+            });
+            const deploymentChart = new Chart(document.getElementById('deploymentChart'), {
+                type: 'bar', data: { labels: ['Performance', 'Flexibility', 'Management', 'Cost Model'], datasets: [ { label: 'Hyperscale Cloud', data: [7, 9, 8, 6], backgroundColor: primaryColor, }, { label: 'Bare-Metal', data: [10, 5, 4, 8], backgroundColor: secondaryColor, } ] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true, max: 18, display: false, }, y: { stacked: true } }, plugins: { legend: { position: 'top' }, tooltip: { ...tooltipPlugin.tooltip, mode: 'index', intersect: false } } }
+            });
+            const servingFrameworkChart = new Chart(document.getElementById('servingFrameworkChart'), {
+                type: 'radar', data: { labels: ['Raw Throughput', 'Programmability', 'K8s Native', 'Ease of Use', 'Flexibility'], datasets: [ { label: 'NVIDIA Triton', data: [10, 4, 7, 8, 6], fill: true, backgroundColor: 'rgba(62, 146, 204, 0.2)', borderColor: primaryColor, pointBackgroundColor: primaryColor, }, { label: 'Ray Serve', data: [7, 10, 5, 7, 10], fill: true, backgroundColor: 'rgba(10, 36, 99, 0.2)', borderColor: secondaryColor, pointBackgroundColor: secondaryColor, }, { label: 'KServe', data: [6, 6, 10, 6, 8], fill: true, backgroundColor: 'rgba(165, 216, 243, 0.4)', borderColor: accentColor, pointBackgroundColor: accentColor, } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, tooltip: tooltipPlugin.tooltip }, scales: { r: { angleLines: { display: true }, suggestedMin: 0, suggestedMax: 10, pointLabels: { font: { size: 11 } } } } }
+            });
+
+            // --- Gemini API Integration ---
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            const callGemini = async (prompt, buttonEl, responseEl) => {
+                const originalButtonText = buttonEl.innerHTML;
+                buttonEl.innerHTML = '<span class="loader"></span> Generating...';
+                buttonEl.disabled = true;
+                responseEl.classList.remove('hidden');
+                responseEl.textContent = 'Thinking...';
+
+                try {
+                    const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        responseEl.textContent = text;
+                    } else {
+                        throw new Error("No content received from API.");
+                    }
+
+                } catch (error) {
+                    console.error("Gemini API Error:", error);
+                    responseEl.textContent = `Error: Could not retrieve explanation. ${error.message}`;
+                } finally {
+                    buttonEl.innerHTML = originalButtonText;
+                    buttonEl.disabled = false;
+                }
+            };
             
-            return { memory: requiredMemoryPerNode, breakdown, finePrint };
-        }
+            document.getElementById('explainDeploymentBtn').addEventListener('click', (e) => {
+                const prompt = `You are an expert AI systems architect. Explain the "Cloud vs. Bare-Metal Trade-offs" chart for an audience of technical managers.
+                The chart data is as follows:
+                - Hyperscale Cloud scores: Performance=7, Flexibility=9, Management=8, Cost Model=6.
+                - Bare-Metal scores: Performance=10, Flexibility=5, Management=4, Cost Model=8.
+                A higher score is better in that category.
+                Explain the key takeaways. For example, why does bare-metal have higher performance but lower flexibility? Why is the cost model for cloud lower-rated? Keep the explanation concise and focused on actionable insights.`;
+                callGemini(prompt, e.target, document.getElementById('deploymentExplanation'));
+            });
 
-        function getModelInternals(paramsInBillions) {
-            if (paramsInBillions <= 7) return { layers: 32, hiddenDim: 4096 };
-            if (paramsInBillions <= 13) return { layers: 40, hiddenDim: 5120 };
-            if (paramsInBillions <= 34) return { layers: 60, hiddenDim: 6656 };
-            if (paramsInBillions <= 70) return { layers: 80, hiddenDim: 8192 };
-            const layers = Math.round(80 + (paramsInBillions - 70) * 0.4); 
-            const hiddenDim = Math.round(8192 + (paramsInBillions - 70) * 24);
-            return { layers, hiddenDim };
-        }
+            document.getElementById('explainServingBtn').addEventListener('click', (e) => {
+                const prompt = `You are an expert AI systems architect. Explain the "Serving Framework Comparison" radar chart for an audience of DevOps engineers.
+                The chart compares NVIDIA Triton, Ray Serve, and KServe on five axes: Raw Throughput, Programmability, K8s Native, Ease of Use, Flexibility.
+                The data is:
+                - Triton: [10, 4, 7, 8, 6]
+                - Ray Serve: [7, 10, 5, 7, 10]
+                - KServe: [6, 6, 10, 6, 8]
+                Explain when a team should choose each framework based on these strengths and weaknesses. For example, 'Choose Triton if your top priority is...' or 'Consider Ray Serve when you need...'. Format the response with clear headings for each framework.`;
+                callGemini(prompt, e.target, document.getElementById('servingExplanation'));
+            });
 
-        function findAndRenderInstances(requiredMemory, parallelism) {
-            let html = '<h2 class="text-xl font-semibold mb-4">3. Instance Recommendations</h2>';
-            let recommendationType = 'none';
-
-            if (parallelism === 'automatic') {
-                const singleGpuFits = instanceData.filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
-                if (singleGpuFits.length > 0) {
-                    html += renderInstanceSection('Single Accelerator Instances', singleGpuFits, 'single');
-                    recommendationType = 'single';
-                }
-
-                const multiGpuFits = instanceData.filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.gpuMemoryPerGpu < requiredMemory && inst.price > 0);
-                if (multiGpuFits.length > 0) {
-                    html += renderInstanceSection('Multi-Accelerator Instances', multiGpuFits, 'multi');
-                    recommendationType = recommendationType === 'single' ? 'single_and_multi' : 'multi';
-                }
-
-                if (recommendationType === 'none' && requiredMemory > 0) {
-                    html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
-                    recommendationType = 'cluster';
-                }
-            } else if (parallelism === 'data') {
-                const singleGpuFits = instanceData.filter(inst => inst.gpuMemoryPerGpu >= requiredMemory && inst.price > 0);
-                if (singleGpuFits.length > 0) {
-                     html += renderDataParallelismSection('Data Parallelism Recommendations', singleGpuFits);
-                     recommendationType = 'data';
-                }
-            } else if (parallelism === 'tensor_pipeline') {
-                const multiGpuFits = instanceData.filter(inst => inst.gpus > 1 && inst.totalGpuMemory >= requiredMemory && inst.price > 0);
-                 if (multiGpuFits.length > 0) {
-                    html += renderInstanceSection('Tensor/Pipeline Parallelism Recommendations', multiGpuFits, 'multi');
-                    recommendationType = 'multi';
-                } else if (requiredMemory > 0) {
-                    html += renderClusterSection('UltraCluster Recommendations (Multi-Node)', requiredMemory);
-                    recommendationType = 'cluster';
-                }
-            } else if(parallelism === 'expert') {
-                const numExperts = parseInt(numExpertsEl.value, 10) || 1;
-                const expertsPerNode = parseInt(expertsPerNodeEl.value, 10) || 1;
-                const nodesNeeded = Math.ceil(numExperts / expertsPerNode);
-
-                const validNodes = instanceData.filter(inst => inst.totalGpuMemory >= requiredMemory && inst.gpus >= expertsPerNode && inst.price > 0);
-
-                if (validNodes.length > 0) {
-                    html += renderExpertClusterSection('Expert Parallelism Cluster', validNodes, nodesNeeded);
-                    recommendationType = 'expert_cluster';
-                }
-            }
-            
-            if (recommendationType === 'none') {
-                html += `<div class="text-center p-6 border-2 border-dashed rounded-lg">
-                            <p class="font-semibold text-gray-700">No suitable instance found for ${requiredMemory.toFixed(2)} GB requirement and the selected parallelism strategy.</p>
-                        </div>`;
-            }
-
-            recommendationsEl.innerHTML = html;
-            return recommendationType;
-        }
-
-        // --- Rendering Logic ---
-        function renderSummary(requiredMemory, breakdown, finePrint, parallelism) {
-            let breakdownHtml = Object.entries(breakdown).map(([key, value]) => `
-                <li class="flex justify-between py-1">
-                    <span class="text-gray-600">${key}:</span>
-                    <span class="font-medium text-gray-800">${value}</span>
-                </li>
-            `).join('');
-
-            const title = parallelism === 'expert' ? 'Est. Memory Requirement Per Node' : 'Estimated Memory Requirement';
-
-            summaryEl.innerHTML = `
-                <h2 class="text-xl font-semibold mb-2">2. ${title}</h2>
-                <div class="p-4 bg-gray-100 rounded-lg">
-                    <div class="flex justify-between items-baseline mb-3">
-                        <h3 class="text-lg font-semibold">Total Needed:</h3>
-                        <span class="text-2xl font-bold text-indigo-600">${requiredMemory.toFixed(2)} GB</span>
-                    </div>
-                    <ul class="text-sm space-y-1 border-t pt-2">
-                        ${breakdownHtml}
-                    </ul>
-                    <p class="text-xs text-gray-500 mt-3 border-t pt-2">${finePrint}</p>
-                </div>
-            `;
-        }
-        
-        function renderInstanceSection(title, instances, type) {
-            const memoryKey = type === 'single' ? 'gpuMemoryPerGpu' : 'totalGpuMemory';
-            
-            const cheapest = [...instances].sort((a,b) => a.price - b.price)[0];
-            const bestValue = [...instances].sort((a,b) => (a.price / a[memoryKey]) - (b.price / b[memoryKey]))[0];
-
-            let instancesHtml = instances
-                .sort((a,b) => a.price - b.price) 
-                .slice(0, 5) 
-                .map(inst => {
+            document.getElementById('getRecommendationBtn').addEventListener('click', (e) => {
+                const appType = document.getElementById('appType').value;
+                const priority = document.getElementById('priority').value;
                 
-                const isCheapest = inst.name === cheapest.name;
-                const isBestValue = inst.name === bestValue.name;
-                
-                let badgeHtml = '';
-                if(isCheapest && isBestValue) {
-                    badgeHtml = `<span class="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full ml-3">Lowest Cost & Best Value</span>`;
-                } else if (isCheapest) {
-                    badgeHtml = `<span class="text-xs font-semibold bg-sky-100 text-sky-800 px-2 py-1 rounded-full ml-3">Lowest Cost</span>`;
-                } else if (isBestValue) {
-                     badgeHtml = `<span class="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full ml-3">Best Value ($/GB)</span>`;
-                }
+                const infographicContext = `
+                Key Inference Engines:
+                - vLLM: Uses PagedAttention for high-throughput serving.
+                - SGLang: Uses RadixAttention, excels at complex apps like multi-turn chat and agents.
+                - Modular MAX: A new, unified stack with the Mojo language, aiming for portability.
+                - Apple MLX: For on-device performance on Apple Silicon.
 
-                const colorClass = {
-                    'GPU': 'bg-green-100 text-green-800',
-                    'Inferentia': 'bg-purple-100 text-purple-800',
-                    'Trainium': 'bg-yellow-100 text-yellow-800',
-                }[inst.type];
-                
-                const memoryToShow = inst[memoryKey];
-                const pricePerGb = inst.price / memoryToShow;
-
-                return `
-                    <div class="border rounded-lg p-3 transition-colors ${isCheapest || isBestValue ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}">
-                        <div class="flex justify-between items-start">
-                            <p class="font-semibold text-indigo-700 flex items-center">${inst.name} ${badgeHtml}</p>
-                            <span class="text-base font-bold text-gray-700">$${inst.price.toFixed(4)}/hr</span>
-                        </div>
-                        <p class="text-sm text-gray-600 mt-1">
-                            <span class="font-medium">${inst.gpus}x ${inst.gpuType}</span> | 
-                            Accelerator Memory: <span class="font-medium">${memoryToShow} GB</span> | 
-                            vCPUs: <span class="font-medium">${inst.vcpu}</span>
-                        </p>
-                         <p class="text-xs text-gray-500 mt-1">
-                            Value: <span class="font-semibold text-gray-700">$${pricePerGb.toFixed(4)}</span> per GB | Type: <span class="font-semibold px-1 py-0.5 rounded ${colorClass}">${inst.type}</span>
-                        </p>
-                    </div>
+                Serving Frameworks:
+                - NVIDIA Triton: Best for raw throughput.
+                - Ray Serve: Highly programmable and flexible, great for complex Python logic.
+                - KServe: Best for Kubernetes-native integration and management.
                 `;
-            }).join('');
-            
-            return `
-                <div class="mt-4">
-                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
-                    <div class="mt-2 space-y-2">${instancesHtml}</div>
-                </div>
-            `;
-        }
 
-        function renderDataParallelismSection(title, instances) {
-             const bestInstance = [...instances].sort((a,b) => (a.price / a.gpuMemoryPerGpu) - (b.price / b.gpuMemoryPerGpu))[0];
+                const prompt = `You are the "Strategic AI Advisor" for an infographic on the modern AI inference stack.
+                Based on the following context about available technologies:
+                ${infographicContext}
 
-             let html = `
-                <div class="border border-indigo-500 bg-indigo-50 rounded-lg p-3">
-                    <div class="flex justify-between items-start">
-                        <p class="font-semibold text-indigo-700 flex items-center">${bestInstance.name} (or similar)</p>
-                         <span class="text-xs font-semibold bg-sky-100 text-sky-800 px-2 py-1 rounded-full ml-3">Recommended Node</span>
-                    </div>
-                     <p class="text-sm text-gray-600 mt-1">
-                        Deploy multiple replicas of this instance to increase throughput. For example, deploying 4 nodes would handle 4x the concurrent requests for a total cost of <strong>$${(bestInstance.price * 4).toFixed(2)}/hr</strong>.
-                    </p>
-                </div>
-             `;
-             return `
-                <div class="mt-4">
-                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
-                    <div class="mt-2 space-y-2">${html}</div>
-                </div>
-            `;
-        }
+                Provide a personalized stack recommendation for a user with the following requirements:
+                - Application Type: ${appType}
+                - #1 Priority: ${priority}
 
-        function renderClusterSection(title, requiredMemory) {
-             const clusterCandidates = instanceData.filter(inst => 
-                ['p5.48xlarge', 'p6-b200.48xlarge', 'trn1n.32xlarge'].includes(inst.name) && inst.price > 0
-            );
-
-            const clusterConfigs = clusterCandidates.map(inst => {
-                const nodesNeeded = Math.ceil(requiredMemory / inst.totalGpuMemory);
-                return { ...inst, nodesNeeded, totalClusterCost: nodesNeeded * inst.price, totalClusterMemory: nodesNeeded * inst.totalGpuMemory };
-            }).sort((a,b) => a.totalClusterCost - b.totalClusterCost);
-
-            let clusterHtml = clusterConfigs.map(config => {
-                 const colorClass = { 'GPU': 'bg-green-100 text-green-800', 'Trainium': 'bg-yellow-100 text-yellow-800' }[config.type];
-                return `
-                     <div class="border border-indigo-500 bg-indigo-50 rounded-lg p-3">
-                        <div class="flex justify-between items-start">
-                            <p class="font-semibold text-indigo-700 flex items-center">${config.nodesNeeded} x ${config.name}</p>
-                            <span class="text-base font-bold text-gray-700">$${config.totalClusterCost.toFixed(2)}/hr (Total)</span>
-                        </div>
-                        <p class="text-sm text-gray-600 mt-1">
-                           Total Memory: <span class="font-medium">${config.totalClusterMemory.toLocaleString()} GB</span> | Type: <span class="font-semibold px-1 py-0.5 rounded ${colorClass}">${config.type}</span>
-                        </p>
-                    </div>
-                `
-            }).join('');
-            
-            return `
-                <div class="mt-4">
-                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
-                    <div class="mt-2 space-y-2">${clusterHtml}</div>
-                </div>
-            `;
-        }
-
-         function renderExpertClusterSection(title, instances, nodesNeeded) {
-             let instancesHtml = instances
-                .sort((a, b) => a.price - b.price)
-                .slice(0, 5)
-                .map(inst => {
-                const totalClusterCost = inst.price * nodesNeeded;
-                 const colorClass = { 'GPU': 'bg-green-100 text-green-800', 'Trainium': 'bg-yellow-100 text-yellow-800' }[inst.type];
-                 return `
-                    <div class="border border-indigo-500 bg-indigo-50 rounded-lg p-3">
-                        <div class="flex justify-between items-start">
-                            <p class="font-semibold text-indigo-700 flex items-center">${nodesNeeded} x ${inst.name}</p>
-                            <span class="text-base font-bold text-gray-700">$${totalClusterCost.toFixed(2)}/hr (Total)</span>
-                        </div>
-                        <p class="text-sm text-gray-600 mt-1">
-                           Node Type: <span class="font-medium">${inst.type}</span> |
-                           Accelerators per Node: <span class="font-medium">${inst.gpus}</span> |
-                           Memory per Node: <span class="font-medium">${inst.totalGpuMemory} GB</span>
-                        </p>
-                    </div>
-                `;
-            }).join('');
-
-            return `
-                <div class="mt-4">
-                    <h3 class="text-lg font-semibold text-gray-800">${title}</h3>
-                    <div class="mt-2 space-y-2">${instancesHtml}</div>
-                </div>
-            `;
-        }
-
-
-        function renderGuidance(recommendationType) {
-            let parallelismHtml = '';
-            if (recommendationType === 'multi' || recommendationType === 'single_and_multi') {
-                parallelismHtml = `
-                    <div class="p-3 bg-blue-50 rounded-lg">
-                        <h4 class="font-bold text-blue-800">Recommended Strategy: Model Parallelism</h4>
-                        <p class="text-blue-700">Your model is too large for a single accelerator but fits on a multi-accelerator instance. Use a combination of <strong class="font-semibold">Tensor Parallelism</strong> (splitting layers across accelerators) and <strong class="font-semibold">Pipeline Parallelism</strong> (splitting the whole model layer-by-layer) to distribute the workload.</p>
-                    </div>`;
-            } else if (recommendationType === 'cluster' || recommendationType === 'expert_cluster') {
-                 parallelismHtml = `
-                    <div class="p-3 bg-red-50 rounded-lg">
-                        <h4 class="font-bold text-red-800">Recommended Strategy: Multi-Node Parallelism (FSDP)</h4>
-                        <p class="text-red-700">Your model is too large for any single server. You will need a multi-node cluster. The recommended approach is <strong class="font-semibold">Fully Sharded Data Parallelism (FSDP)</strong>, which shards the model's weights, gradients, and optimizer states across all accelerators in the cluster. This is the most memory-efficient method for very large scale training.</p>
-                    </div>`;
-            }
-
-            guidanceEl.innerHTML = `
-                <h2 class="text-xl font-semibold mb-4 border-t pt-6">4. Fine Print & Guidance</h2>
-                <div class="space-y-4 text-sm">
-                    ${parallelismHtml}
-                    <div class="p-3 bg-gray-100 rounded-lg">
-                        <h4 class="font-bold text-gray-800">Parallelism Strategies Explained</h4>
-                        <ul class="list-disc list-inside mt-2 space-y-2 text-gray-700">
-                           <li><strong>Data Parallelism:</strong> Replicates the model across multiple accelerators. It's used to increase <span class="font-semibold">throughput</span> (e.g., more requests per second), not to fit larger models. Best for when a model already fits on a single accelerator.</li>
-                            <li><strong>Tensor Parallelism:</strong> Splits a single layer of a model across multiple accelerators. This is necessary when the weights of a single layer are too large for one accelerator's memory.</li>
-                             <li><strong>Pipeline Parallelism:</strong> Splits the entire model, assigning different layers to different accelerators. This is necessary when the full model is too deep to fit on one accelerator, even with Tensor Parallelism.</li>
-                             <li><strong>Expert Parallelism:</strong> A special technique required only for Mixture-of-Experts (MoE) models to route data to the correct "expert" layers.</li>
-                        </ul>
-                    </div>
-                </div>
-            `;
-        }
-        
-        // --- EVENT LISTENERS ---
-        calculateBtn.addEventListener('click', calculateAndDisplay);
-        taskEl.addEventListener('change', handleFormState);
-        parallelismEl.addEventListener('change', () => {
-            handleFormState();
-            calculateAndDisplay();
+                Your response should have two parts:
+                1. **Recommendation:** Clearly state the recommended Inference Engine and Serving Framework.
+                2. **Justification:** Explain WHY this combination is the best fit for the user's specific needs, directly referencing their application type and priority.
+                Keep the tone helpful and expert.`;
+                
+                callGemini(prompt, e.target, document.getElementById('recommendationResponse'));
+            });
         });
-
-
-        // --- Initial Load ---
-        window.onload = () => {
-            handleFormState();
-            calculateAndDisplay();
-        };
-
     </script>
 </body>
 </html>
