@@ -1,7 +1,7 @@
 {
-  "name": "llm-instance-calculator",
+  "name": "ai-inference-stack",
   "version": "1.0.0",
-  "description": "A tool to find the best EC2 instance for LLM workloads.",
+  "description": "An interactive deep-dive into the engines, compilers, and strategies accelerating the new era of AI, from cloud to edge.",
   "main": "index.js",
   "scripts": {
     "build": "tailwindcss -i ./src/input.css -o ./dist/output.css",
